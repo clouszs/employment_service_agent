@@ -1,0 +1,38 @@
+# 高校智慧就业服务平台 - AI问答模块 —— 后端依赖
+# Python 3.11+（当前环境 3.14）
+
+fastapi>=0.115
+uvicorn[standard]>=0.30
+SQLAlchemy>=2.0
+PyMySQL>=1.1
+pydantic>=2.7
+pydantic-settings>=2.3
+python-dotenv>=1.0
+PyJWT>=2.8
+python-multipart>=0.0.9
+
+# RAG：DashScope(兼容OpenAI接口) + 本地向量库
+openai>=1.30
+chromadb>=0.5
+pypdf>=4.2
+
+# 重试机制
+tenacity>=8.0
+
+# ================================================================
+# Agent 核心 — 阶段 1 引入
+# ================================================================
+# LangGraph >=1.2 已将 checkpoint 内置，无需单独安装 langgraph-checkpoint
+langgraph>=1.2.0
+
+# LangSmith 追踪 - 从环境变量 LANGSMITH_API_KEY 读取 API Key
+langsmith>=0.1.0
+
+# 定时任务 — 阶段 3 引入
+apscheduler>=3.10.0
+
+# 数据库迁移 — 阶段 0 引入
+alembic>=1.12.0
+
+# Embedding 缓存 L2（Redis 不可用时自动降级，不强依赖）— 阶段 0 引入
+redis>=5.0

@@ -1,0 +1,20 @@
+# 环境与密钥
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# IDE
+.idea/
+.vscode/
+
+# 日志与上传
+*.log
+uploads/
+
+# 向量库本地数据
+chroma_data/
