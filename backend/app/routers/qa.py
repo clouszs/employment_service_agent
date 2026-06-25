@@ -1,4 +1,4 @@
-"""检索问答接口：纯检索 / 同步问答 / 流式问答(SSE)。"""
+"""检索问答接口：纯检索 / 同步问答 / 流式问答(SSE) / Agent 问答。"""
 
 import json
 
@@ -10,7 +10,9 @@ from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.core.response import success
 from app.models import SysUser
+from app.schemas.agent import AgentChatResponse
 from app.schemas.qa import AskRequest, SearchRequest
+from app.services import qa_service
 from app.services import rag_service
 
 router = APIRouter(tags=["问答-RAG"])
@@ -59,3 +61,30 @@ def ask_stream(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.post("/ask/agent", summary="Agent 问答(同步，集成 Agent 工作流)")
+def ask_agent(
+    payload: AskRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current: SysUser = Depends(get_current_user),
+) -> dict:
+    """Agent 问答接口（V1 同步版）。
+
+    渐进式迁移：agent_enabled=False 时切回旧 RAG。
+    """
+    from app.core.config import settings
+
+    client_ip = request.client.host if request.client else None
+
+    if not settings.agent_enabled:
+        result = rag_service.ask(
+            db, current.id, payload.question, conversation_id=payload.conversation_id, client_ip=client_ip
+        )
+        return success(result)
+
+    result = qa_service.agent_chat(
+        db, current.id, payload.question, conversation_id=payload.conversation_id, client_ip=client_ip
+    )
+    return success(result)

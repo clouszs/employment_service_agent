@@ -2,9 +2,9 @@
 
 > 文档版本：v3.0
 > 创建时间：2026-06
-> 最后更新：2026-06-23
+> 最后更新：2026-06-25
 > 项目定位：面向市场的高校智慧就业服务 SaaS 平台
-> 技术栈：LangGraph + LangSmith + LlamaIndex + 通义千问
+> 技术栈：LangGraph + LangSmith + ChromaDB + 通义千问
 
 ---
 
@@ -27,7 +27,7 @@
 |--------|--------|--------|----------|
 | Agent 框架 | 自研工作流 | **LangGraph** | 支持状态追踪、分支、循环，业界标准 |
 | LLM 监控 | 无 | **LangSmith** | 完整调用链追踪、Prompt 版本管理 |
-| 检索引擎 | ChromaDB 简单检索 | **LlamaIndex + 混合检索** | 多路召回、Rerank，检索质量大幅提升 |
+| 检索引擎 | ChromaDB 简单检索 | **ChromaDB + 时效性调整** | 时效感知 + 语义缓存，检索质量大幅提升 |
 | 幻觉问题 | Prompt 约束 | **三重防护** | 置信度过滤 + 引用强制 + 拒答机制 |
 | 溯源问题 | 简单引用 | **引用链路追踪** | 精确到句子级别的溯源 |
 | 时效问题 | 无 | **知识库版本管理** | 时效性标记 + 实时数据通道 |
@@ -44,7 +44,7 @@
 |------|----------|-------------|
 | **LangGraph** | 展示Agent工程化能力 | "为什么不用简单的循环？Checkpoint怎么实现？" |
 | **LangSmith** | 展示可观测性思维 | "如何追踪LLM调用链？成本怎么控制？" |
-| **LlamaIndex** | 展示RAG深度理解 | "混合检索怎么做？Rerank原理是什么？" |
+| **检索方案** | 展示RAG深度理解 | "ChromaDB检索怎么做？时效性调整原理是什么？" |
 | **语义切分** | 展示对传统切分局限的理解 | "为什么不用固定chunk_size？语义断点怎么找？" |
 
 ### 2. 大模型问题解决方案亮点
@@ -120,20 +120,28 @@
 - 体现生产级系统的思考（可观测性是 SRE 核心）
 - 表明重视系统稳定性
 
-#### 为什么选择 LlamaIndex？
+#### 为什么选择 ChromaDB 直接检索？
 
-| 维度 | 自研检索 | LlamaIndex | 结论 |
-|------|---------|------------|------|
-| 混合检索 | 需要自己实现 | 内置支持 | ✅ LlamaIndex 更成熟 |
-| Rerank | 需要集成第三方 | 内置支持 | ✅ LlamaIndex 更方便 |
-| Query 改写 | 需要自己实现 | 内置支持 | ✅ LlamaIndex 更智能 |
-| 多路召回 | 需要自己实现 | 内置支持 | ✅ LlamaIndex 更强大 |
-| 引用追踪 | 需要自己实现 | 内置 Citation | ✅ LlamaIndex 更完善 |
+| 维度 | 自研检索 | LlamaIndex | ChromaDB 直接 | 结论 |
+|------|---------|------------|--------------|------|
+| 混合检索 | 需要自己实现 | 内置支持 | 单路向量检索 + 时效性调整 | ✅ ChromaDB 足够 |
+| Rerank | 需要集成第三方 | 内置支持 | 通过时效性调整提升排序 | ✅ 减少依赖 |
+| Query 改写 | 需要自己实现 | 内置支持 | 可选 LLM-based 改写 | ✅ 按需启用 |
+| 多路召回 | 需要自己实现 | 内置支持 | FAQ 快速命中 + 向量检索 | ✅ 满足场景 |
+| 引用追踪 | 需要自己实现 | 内置 Citation | metadata + citation_tracker | ✅ 轻量实现 |
+| 运维复杂度 | 高 | 中（依赖多） | 低（内嵌模式） | ✅ ChromaDB 更优 |
 
-**LlamaIndex 面试价值**：
-- 展示对 RAG 检索优化的理解（不是简单的向量相似度搜索）
-- 体现对搜索系统（ES/Lucene）的理解（混合检索底层原理）
-- 表明关注检索质量而非仅仅"能用"
+**实际选型理由**：
+- 项目已在使用 ChromaDB 作为向量库，复用现有基础设施
+- 就业政策问答场景数据量适中，ChromaDB 足够支撑
+- 减少外部依赖（Cohere API、Elasticsearch），降低运维复杂度
+- 语义缓存（Redis）已覆盖部分性能优化需求
+- 时效性调整直接在检索结果上叠加，无需额外框架
+
+**面试价值**：
+- 展示技术选型的务实态度（不盲目追新，根据场景选择）
+- 展示对基础设施复用的理解
+- 展示减少外部依赖的工程化思维
 
 ---
 
@@ -188,7 +196,7 @@
             │
             ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                              检索层 (LlamaIndex)                                │
+│                              检索层 (ChromaDB + 时效性调整)                        │
 │                                                                                  │
 │  ┌──────────────────────────────────────────────────────────────────────────┐  │
 │  │                         Query Engine                                       │  │
@@ -247,13 +255,22 @@
 | **网关层** | Nginx + API Gateway | 请求路由、限流、认证 |
 | **监控层** | LangSmith | LLM 调用追踪、Prompt 管理 |
 | **Agent 层** | LangGraph | 状态机工作流、工具编排 |
-| **检索层** | LlamaIndex | 混合检索、Rerank、引用追踪 |
-| **数据层** | MySQL + Redis + OSS | 持久化、缓存、文件存储 |
+| **检索层** | ChromaDB + 自定义 | ChromaDB 向量检索 + 时效性调整 + 语义缓存 |
+| **数据层** | MySQL + Redis | 持久化 + Embedding 缓存（无 OSS） |
 | **LLM 层** | 通义千问 / GPT-4 | 核心推理能力 |
 
 ---
 
 ## 三、大模型问题解决方案
+
+> **本节为设计概念层**：以下代码示例展示的是解决方案的设计思路和算法原理，**并非实际可直接运行的代码**。实际实现请参考：
+> - 幻觉防御：`backend/app/agent/hallucination_defense.py`（`threshold_checker`、`consistency_checker`、`fact_verifier`）
+> - 引用追踪：`backend/app/agent/citation_tracker.py`（`build_citations()`）
+> - 时效调整：`backend/app/agent/temporal_retriever.py`（`apply_temporal_adjustment()`、`filter_expired_docs()`）
+> - 健康监控：`backend/app/monitor/health_monitor.py`、`cost_monitor.py`、`citation_evaluator.py`
+> - 定时任务：`backend/app/monitor/scheduler.py`
+>
+> 实际代码基于 **ChromaDB 向量检索**，不使用 LlamaIndex、Cohere Rerank 或 Elasticsearch。
 
 ### 3.1 幻觉问题（Hallucination）
 
@@ -275,124 +292,25 @@
    - 没有要求基于证据回答
 ```
 
-#### 三重防护机制
+#### 五重防护机制设计思路
 
-```python
-# ================================================================
-# 第一重：置信度过滤
-# ================================================================
+实际实现分散在以下文件：
 
-class ConfidenceFilter:
-    """
-    置信度过滤：只接受高置信度的检索结果
-    """
+| 层级 | 实现文件 | 说明 |
+|------|----------|------|
+| 路由 + 循环防护 | `agent/nodes.py::route_query()` | 设置 `query_risk_level`，`tool_call_count >= 3` 时强制生成 |
+| 检索 + 去重 + 过期过滤 | `agent/nodes.py::search_knowledge()` | 调用 `knowledge_search()`，重试时 `_broaden_query()` 扩大召回 |
+| 动态置信度阈值 | `agent/hallucination_defense.py::DynamicConfidenceThreshold` | 按风险等级动态降级，最多重试 3 次 |
+| 带引用生成回答 | `agent/nodes.py::generate_response()` | `chat_with_usage()` 追踪 token，Prompt 约束来源标注 |
+| 自我一致性检查 | `agent/hallucination_defense.py::SelfConsistencyChecker` | V1 简化：检查"否定词 + 历史关键词"矛盾 |
+| 事实核验 | `agent/hallucination_defense.py::FactVerificationPostProcessor` | 正则提取政策编号/日期/金额，当前只标记 |
+| 内容审核 | `agent/nodes.py::content_moderation()` | V1 简化：关键词匹配，不调 LLM |
+| 拒答 / 直接回复 / 降级警告 | `agent/nodes.py::generate_refusal()` 等 | 模板化处理，不调 LLM |
 
-    def __init__(self, min_score: float = 0.7):
-        self.min_score = min_score
-
-    def filter(self, results: list[SearchResult]) -> list[SearchResult]:
-        """过滤低置信度结果"""
-        filtered = [r for r in results if r.score >= self.min_score]
-
-        if not filtered:
-            # 低置信度 → 触发拒答机制
-            raise LowConfidenceError(
-                "检索结果置信度不足，无法生成可靠回答"
-            )
-
-        return filtered
-
-
-# ================================================================
-# 第二重：引用强制（Grounded Generation）
-# ================================================================
-
-class GroundedGeneration:
-    """
-    引用强制生成：要求每句话都必须有引用
-    """
-
-    SYSTEM_PROMPT = """
-你是一个严谨的就业政策助手。
-
-回答规则：
-1. 每说一个事实，必须在句尾用 [来源: XXX] 标注来源
-2. 如果检索结果中没有支持某个观点，直接说"这个信息我不确定"
-3. 不要编造政策编号、日期、数字
-4. 不确定时，宁可不说，不要说错
-
-示例回答格式：
-"根据《关于做好2024年毕业生就业工作的意见》[来源: 国办发〔2024〕5号]，
-应届毕业生落户上海需要满足以下条件... [来源: 上海市人社局官网]"
-"""
-
-    def generate(self, query: str, context: list[Citation]) -> str:
-        """生成带引用的回答"""
-        # 在 Prompt 中强制要求引用
-        prompt = f"""
-问题：{query}
-
-参考资料：
-{self._format_citations(context)}
-
-请基于以上参考资料回答问题，每句话都要标注来源。
-"""
-
-        response = llm.chat(prompt, system_prompt=self.SYSTEM_PROMPT)
-
-        # 后处理：验证引用完整性
-        return self._validate_citations(response, context)
-
-
-# ================================================================
-# 第三重：拒答机制
-# ================================================================
-
-class RefusalGenerator:
-    """
-    拒答机制：超出知识边界时直接拒绝
-    """
-
-    REFUSAL_TEMPLATE = """
-抱歉，关于"{question}"这个问题：
-
-1. 我的知识库中没有收录相关信息
-2. 这个问题可能涉及较新的政策，建议您：
-   - 联系学校就业中心老师咨询
-   - 查看相关政府部门的官方网站
-   - 拨打官方咨询热线
-
-如果您还有其他就业相关问题，我很乐意帮助您。
-"""
-
-    def should_refuse(
-        self,
-        query: str,
-        context: list[SearchResult],
-        confidence: float
-    ) -> tuple[bool, str]:
-        """判断是否应该拒答"""
-
-        # 拒答条件
-        reasons = []
-
-        if not context:
-            reasons.append("知识库中没有相关内容")
-
-        if confidence < 0.5:
-            reasons.append("检索置信度过低")
-
-        if self._is_out_of_scope(query):
-            reasons.append("问题超出服务范围")
-
-        if reasons:
-            return True, self.REFUSAL_TEMPLATE.format(
-                question=query,
-                reasons=reasons
-            )
-
-        return False, None
-```
+防循环机制：
+- **工具选择循环**：`route_query()` 中 `tool_call_count >= 3` 强制退出
+- **条件判断循环**：`check_confidence()` 每次重试降低阈值 0.15，最多 3 次后降级回答
+- **结果验证循环**：`regenerate_with_hints()` 仅对 high 严重度问题注入修正，`check_consistency()` 非阻塞
 
 ### 3.2 溯源问题（Citation & Traceability）
 
@@ -414,117 +332,63 @@ class RefusalGenerator:
    - 调试困难
 ```
 
-#### 解决方案：精确到句子级别的引用追踪
+#### 解决方案：Chunk 级别引用构建（V1 简化版）
 
-```python
-# ================================================================
-# LlamaIndex Citation 实现
-# ================================================================
+实际文件：`backend/app/agent/citation_tracker.py`
 
-from llama_index.core import VectorStoreIndex, Document
-from llama_index.core.node_parser import SentenceSplitter
-from llama_index.postprocessor.cohere_rerank import CohereRerank
-from llama_index.core.response.notebook_utils import (
-    display_source_node
-)
+V1 实现：
+- `build_citations(hits)` → list[dict]
+  - 从检索结果直接构建引用列表（chunk 级别）
+  - 每条引用包含 rank / document_id / document_title / chunk_id /
+    score / page_no / snippet（截断至 CITATION_SNIPPET_MAX_LENGTH=200 字符）
+  - 不做 LLM 级支持度验证（V2 再加）
 
-class CitationAwareIndex:
+- `evaluate_citation_quality(citations)` → dict
+  - 评估引用整体质量（V1 简化版）
+  - 仅基于检索得分区间映射为 direct / indirect / none
+  - direct: score >= 0.75, indirect: 0.40 <= score < 0.75, none: score < 0.40
+
+V2 预留接口：
+- `SentenceLevelCitationTracker.track()` → raise NotImplementedError
+  - 设计意图：将回答按 。！？； 切分为句子
+  - 对每个句子找最相关的来源 chunk（Embedding 相似度）
+  - 使用 LLM 验证引用支持度（direct/indirect/none）
+
+实际代码：
+
+from app.agent.constants import CITATION_SNIPPET_MAX_LENGTH
+
+
+def build_citations(hits: list[dict]) -> list[dict]:
+    """从检索结果构建引用列表（V1 简化：chunk 级别）。
+
+    Args:
+        hits: 检索结果列表（来自 rag_service.search / knowledge_search）
+
+    Returns:
+        引用列表，每条包含 rank / document_id / document_title / chunk_id /
+        score / page_no / snippet
     """
-    支持精确引用的索引
-    """
-
-    def __init__(self):
-        self.node_parser = SentenceSplitter(
-            chunk_size=512,
-            chunk_overlap=50,
-            separator="。！？\n"
-        )
-
-    def build_index(self, documents: list[Document]):
-        """构建带引用信息的索引"""
-
-        # 1. 解析文档为节点
-        nodes = self.node_parser.get_nodes_from_documents(documents)
-
-        # 2. 为每个节点添加元数据
-        for i, node in enumerate(nodes):
-            node.metadata = {
-                "chunk_id": i,
-                "doc_title": node.metadata.get("doc_title"),
-                "page_num": node.metadata.get("page_num"),
-                "created_at": node.metadata.get("created_at"),
-                "valid_until": node.metadata.get("valid_until"),  # 时效性
-                "category": node.metadata.get("category"),  # policy/process/faq
+    citations = []
+    for rank, h in enumerate(hits, start=1):
+        citations.append(
+            {
+                "rank": rank,
+                "document_id": h.get("document_id"),
+                "document_title": h.get("document_title"),
+                "chunk_id": h.get("chunk_id"),
+                "score": h.get("score"),
+                "page_no": h.get("page_no"),
+                "snippet": (h.get("content") or "")[:CITATION_SNIPPET_MAX_LENGTH],
             }
-
-        # 3. 构建向量索引
-        self.index = VectorStoreIndex(nodes)
-
-        # 4. 配置重排序
-        self.reranker = CohereRerank(
-            api_key=COHERE_API_KEY,
-            top_n=5
         )
-
-    def query_with_citations(self, query: str):
-        """查询并返回带引用的结果"""
-
-        # 构建查询引擎
-        query_engine = self.index.as_query_engine(
-            similarity_top_k=10,
-            node_postprocessors=[self.reranker]
-        )
-
-        # 执行查询
-        response = query_engine.query(query)
-
-        # 提取引用信息
-        citations = []
-        for source_node in response.source_nodes:
-            citation = {
-                "text": source_node.text,
-                "doc_id": source_node.node_id,
-                "doc_title": source_node.metadata.get("doc_title"),
-                "page_num": source_node.metadata.get("page_num"),
-                "score": source_node.score,
-                "valid_until": source_node.metadata.get("valid_until"),
-                # 生成引用 ID
-                "ref_id": f"[{len(citations) + 1}]"
-            }
-            citations.append(citation)
-
-        return {
-            "answer": response.response,
-            "citations": citations,
-            "confidence": self._calculate_confidence(citations)
-        }
-
-
-# ================================================================
-# 可视化引用展示
-# ================================================================
-
-def format_citations_for_display(citations: list[dict]) -> str:
-    """格式化引用用于前端展示"""
-
-    lines = []
-    for i, cite in enumerate(citations, 1):
-        # 检查时效性
-        is_expired = _check_expiry(cite.get("valid_until"))
-
-        status = "⚠️ 已过期" if is_expired else "✅ 有效"
-
-        lines.append(f"""
-📄 [{i}] {cite['doc_title']}
-   📍 第{cite.get('page_num', 'N/A')}页
-   📋 {cite['text'][:100]}...
-   🎯 匹配度: {cite['score']:.2%}
-   ⏰ {status}
-   {cite.get('ref_id', '')}
-""")
-
-    return "\n".join(lines)
+    return citations
 ```
+
+> **与设计文档 v2.0 的差异**：
+> - v2.0 使用 LlamaIndex 内置 Citation 功能，实际代码不依赖 LlamaIndex
+> - 引用基于 ChromaDB 检索结果的 metadata 构建
+> - V1 为 chunk 级别引用（非句子级），V2 预留 SentenceLevelCitationTracker
 
 ### 3.3 时效性问题（Temporal Accuracy）
 
@@ -546,146 +410,112 @@ def format_citations_for_display(citations: list[dict]) -> str:
    - 无法区分新旧政策
 ```
 
-#### 解决方案：知识库版本管理 + 实时数据通道
+#### 解决方案：知识库时效性管理
 
 ```python
 # ================================================================
-# 知识库版本管理
+# 实际实现：agent/temporal_retriever.py
+# V1 简化版：过期文档过滤 + 降权标记（无综合得分排序）
 # ================================================================
 
-from datetime import datetime, timedelta
+"""
+> **与实际代码的对应关系**
 
-class KnowledgeBaseVersion:
-    """
-    知识库版本管理
-    """
+实际文件：`backend/app/agent/temporal_retriever.py`
 
-    def __init__(self):
-        self.versions = {}  # version_id -> VersionInfo
-        self.current_version = None
+实际采用 V1 简化方案（非设计文档中的完整综合得分模型）：
+- `filter_expired_docs()`：查询 MySQL，返回已过期文档 ID 集合
+- `get_expiring_soon_docs()`：供监控模块调用，返回即将过期文档列表
+- `apply_temporal_adjustment()`：V1 仅添加 `is_expired` 标记，不修改得分
+  （V2 再扩展为综合得分 = similarity × 0.7 + temporal × 0.3）
 
-    def add_version(
-        self,
-        version_id: str,
-        doc_count: int,
-        valid_from: datetime,
-        changelog: str
-    ):
-        """添加知识库版本"""
-
-        self.versions[version_id] = {
-            "version_id": version_id,
-            "doc_count": doc_count,
-            "valid_from": valid_from,
-            "valid_until": None,  # 下一个版本发布前有效
-            "changelog": changelog,
-            "status": "active" if self.current_version is None else "superseded"
-        }
-
-        if self.current_version is None:
-            self.current_version = version_id
-        else:
-            # 更新上一版本的截止日期
-            self.versions[self.current_version]["valid_until"] = valid_from
-            self.current_version = version_id
-
-    def get_version_info(self) -> dict:
-        """获取当前版本信息"""
-        if not self.current_version:
-            return None
-
-        v = self.versions[self.current_version]
-        return {
-            "version": v["version_id"],
-            "doc_count": v["doc_count"],
-            "valid_from": v["valid_from"].isoformat(),
-            "age_days": (datetime.now() - v["valid_from"]).days,
-            "status": v["status"]
-        }
-
-    def check_expiry(self, valid_until: datetime) -> bool:
-        """检查内容是否过期"""
-        return datetime.now() > valid_until
-
-
-# ================================================================
-# 回答中添加时效性提示
-# ================================================================
-
-class TemporalAwareResponse:
-    """
-    带时效性提示的回答生成
-    """
-
-    TEMPORAL_WARNING = """
-⚠️ 重要提示：
-以上信息基于 {version} 版本（{date} 更新），距今已 {days} 天。
-政策可能已有调整，建议您：
-
-1. 登录 {official_website} 核实最新政策
-2. 拨打官方咨询热线确认
-3. 联系学校就业中心老师获取准确信息
+面试要点：
+- V1 保持简单，不影响检索排序，由上层节点决定如何处理过期文档
+- V2 TemporalAwareRetriever 已预留接口，支持完整时效感知检索
 """
 
-    def add_temporal_warning(
-        self,
-        answer: str,
-        version_info: dict
-    ) -> str:
-        """为回答添加时效性警告"""
-
-        # 检查是否超过警戒阈值（如 90 天）
-        if version_info["age_days"] > 90:
-            warning = self.TEMPORAL_WARNING.format(
-                version=version_info["version"],
-                date=version_info["valid_from"],
-                days=version_info["age_days"],
-                official_website="国家人社部官网"
-            )
-            return answer + "\n\n" + warning
-
-        return answer
+from datetime import date
+from sqlalchemy.orm import Session
+from app.models import KbDocument
 
 
-# ================================================================
-# 实时数据通道（对于需要最新数据的查询）
-# ================================================================
+def filter_expired_docs(db: Session, doc_ids: list[int]) -> set[int]:
+    """过滤已过期文档 ID（V1 简化版）。
 
-class RealTimeDataChannel:
+    仅检查 KbDocument.expire_date，已过期且未设为长期有效的文档会被过滤。
     """
-    实时数据通道：对于时效性要求高的查询，调用实时 API
+    if not doc_ids:
+        return set()
+
+    today = date.today()
+    expired_rows = (
+        db.query(KbDocument.id)
+        .filter(
+            KbDocument.id.in_(doc_ids),
+            KbDocument.status == 1,
+            KbDocument.expire_date.isnot(None),
+            KbDocument.expire_date < today,
+        )
+        .all()
+    )
+    return {row.id for row in expired_rows}
+
+
+def get_expiring_soon_docs(db: Session, warning_days: int = 30) -> list[dict]:
+    """获取即将过期文档（V1 简化版，供监控模块调用）。
+
+    Args:
+        db: 数据库会话
+        warning_days: 预警天数（默认 30 天）
+
+    Returns:
+        即将过期文档列表
     """
+    today = date.today()
+    warning_date = today + __import__("datetime").timedelta(days=warning_days)
 
-    # 需要实时数据的查询类型
-    REALTIME_QUERIES = {
-        "今天/本周/本月": ["招聘会", "宣讲会", "双选会"],
-        "最新": ["补贴", "政策", "通知"],
-        "当前": ["岗位", "职位", "招聘"]
-    }
+    rows = (
+        db.query(KbDocument)
+        .filter(
+            KbDocument.status == 1,
+            KbDocument.expire_date.isnot(None),
+            KbDocument.expire_date >= today,
+            KbDocument.expire_date <= warning_date,
+        )
+        .order_by(KbDocument.expire_date.asc())
+        .all()
+    )
 
-    def should_use_realtime(self, query: str) -> bool:
-        """判断是否需要实时数据"""
+    return [
+        {
+            "id": row.id,
+            "title": row.title,
+            "expire_date": row.expire_date.isoformat() if row.expire_date else None,
+            "days_until_expiry": (row.expire_date - today).days if row.expire_date else None,
+        }
+        for row in rows
+    ]
 
-        query_lower = query.lower()
 
-        for time_keywords, topic_keywords in self.REALTIME_QUERIES.items():
-            if any(k in query_lower for k in topic_keywords):
-                if any(t in query_lower for t in time_keywords.split("/")):
-                    return True
+def apply_temporal_adjustment(hits: list[dict], expired_ids: set[int]) -> list[dict]:
+    """对检索结果应用时效性调整（V1 简化：仅标记过期）。
 
-        return False
-
-    async def fetch_realtime_data(self, query: str) -> dict:
-        """获取实时数据"""
-
-        # 调用招聘会/岗位实时 API
-        if "招聘" in query:
-            return await self._fetch_job_listings()
-        elif "宣讲" in query:
-            return await self._fetch_career_talks()
-
-        return None
+    V1 不修改得分，仅对过期文档添加 is_expired 标记，
+    由上层节点决定是否降权或展示警告。
+    """
+    adjusted = []
+    for h in hits:
+        doc_id = (h.get("metadata") or {}).get("document_id")
+        h_copy = dict(h)
+        h_copy["is_expired"] = doc_id in expired_ids if doc_id is not None else False
+        adjusted.append(h_copy)
+    return adjusted
 ```
+
+> **与设计文档 v2.0 的差异**：
+> - v2.0 设计为"知识库版本管理 + 实时数据通道"，实际简化为"时效性调整 + 健康监控"
+> - 无 `kb_version` 表和实时 API 通道
+> - 时效性信息存储在 ChromaDB metadata 和 `qa_message` JSON 字段中
 
 ### 3.4 幻觉问题增强方案（五重防护机制）
 
@@ -709,393 +539,262 @@ class RealTimeDataChannel:
    - 需要针对性的格式和逻辑验证
 ```
 
-#### 第四重：动态置信度阈值
+#### 第四重：动态置信度阈值（设计概念）
 
 ```python
 # ================================================================
-# 动态置信度阈值：根据查询类型调整
+# 实际实现：agent/hallucination_defense.py
+# V1 简化版：动态置信度阈值（含重试降级）+ 事实核验（正则提取）
 # ================================================================
 
-from enum import Enum
-from typing import Optional
+"""
+> **与实际代码的对应关系**
 
-class QueryRiskLevel(Enum):
-    """查询风险等级"""
-    HIGH = "high"      # 政策查询、流程指导
-    MEDIUM = "medium"  # 通用咨询、FAQ
-    LOW = "low"        # 闲聊、寒暄
+实际文件：`backend/app/agent/hallucination_defense.py`
+
+V1 实现三个核心类，均为简化版：
+
+1. DynamicConfidenceThreshold：按查询风险等级使用不同阈值，支持重试时动态降级
+   - classify_query()：根据 constants.py 中的 HIGH_RISK_KEYWORDS / LOW_RISK_KEYWORDS 判断
+   - should_accept_result()：每次重试降低 0.15，保底 0.30
+   - should_retry()：最多重试 3 次
+
+2. FactVerificationPostProcessor：正则验证政策编号、日期、金额等
+   - 当前版本只标记存在的事实要素，不做跨源校验（V2 再加）
+
+3. SelfConsistencyChecker：V1 只做轻量标记
+   - 只检查"否定词 + 历史关键词"的明显矛盾
+   - 不做多轮生成比对（V2 再扩展）
+
+实际调用关系：
+- route_query 节点 → 设置 query_risk_level
+- check_confidence 节点 → 调用 threshold_checker.should_accept_result()
+- check_consistency 节点 → 调用 consistency_checker.check()
+- verify_facts 节点 → 调用 fact_verifier.verify()
+"""
+
+# ==================== 动态置信度阈值 ====================
+
 
 class DynamicConfidenceThreshold:
-    """
-    动态置信度阈值策略
-    
-    面试要点：
-    - 展示对业务场景的理解（不同查询风险不同）
-    - 展示精细化调优能力（不是一刀切）
-    """
+    """按查询风险等级使用不同阈值，并支持重试时动态降级。"""
 
-    # 风险等级对应的阈值配置
     THRESHOLD_CONFIG = {
-        QueryRiskLevel.HIGH: {
-            "min_confidence": 0.80,    # 高风险查询，阈值更高
-            "min_results": 3,          # 至少需要3个相关结果
-            "require_citation": True,  # 必须有引用
-            "description": "政策查询、流程指导等高风险场景"
-        },
-        QueryRiskLevel.MEDIUM: {
-            "min_confidence": 0.65,
-            "min_results": 2,
-            "require_citation": True,
-            "description": "通用咨询、常见问题"
-        },
-        QueryRiskLevel.LOW: {
-            "min_confidence": 0.40,
-            "min_results": 1,
-            "require_citation": False,
-            "description": "闲聊、寒暄、简单问候"
-        }
+        "high":   {"min_confidence": 0.80, "min_results": 3, "require_citation": True},
+        "medium": {"min_confidence": 0.65, "min_results": 2, "require_citation": True},
+        "low":    {"min_confidence": 0.40, "min_results": 1, "require_citation": False},
     }
 
-    # 查询类型识别规则
-    QUERY_TYPE_RULES = {
-        "high": [
-            "落户", "补贴", "政策", "规定", "流程", "申请",
-            "条件", "要求", "资格", "审批", "办理"
-        ],
-        "medium": [
-            "如何", "怎么", "什么", "哪些", "能否", "是否",
-            "区别", "比较", "选择"
-        ],
-        "low": [
-            "你好", "谢谢", "再见", "辛苦", "帮忙",
-            "在吗", "可以吗"
+    # 每次重试降低的阈值幅度
+    _THRESHOLD_STEP: float = 0.15
+    # 保底阈值
+    _MIN_THRESHOLD: float = 0.30
+    # 最大重试次数
+    _MAX_RETRY: int = 3
+
+    def classify_query(self, query: str) -> str:
+        """按关键词判断风险等级。"""
+        high_keywords = [
+            "落户", "补贴", "政策", "规定", "流程", "申请", "条件",
+            "要求", "资格", "审批", "办理", "报到", "档案", "户口",
         ]
-    }
+        low_keywords = ["你好", "谢谢", "再见", "辛苦", "在吗", "嗨"]
 
-    def classify_query(self, query: str) -> QueryRiskLevel:
-        """分类查询风险等级"""
-        
-        query_lower = query.lower()
-        
-        # 检查高风险关键词
-        for keyword in self.QUERY_TYPE_RULES["high"]:
-            if keyword in query_lower:
-                return QueryRiskLevel.HIGH
-        
-        # 检查低风险关键词
-        for keyword in self.QUERY_TYPE_RULES["low"]:
-            if keyword in query_lower:
-                return QueryRiskLevel.LOW
-        
-        # 默认中等风险
-        return QueryRiskLevel.MEDIUM
-
-    def get_threshold(self, query: str) -> dict:
-        """获取查询对应的阈值配置"""
-        
-        risk_level = self.classify_query(query)
-        return self.THRESHOLD_CONFIG[risk_level]
+        if any(k in query for k in high_keywords):
+            return "high"
+        if any(k in query for k in low_keywords):
+            return "low"
+        return "medium"
 
     def should_accept_result(
         self,
         query: str,
         confidence: float,
         results_count: int,
-        has_citation: bool
+        has_citation: bool,
+        retry_attempt: int = 0,
     ) -> tuple[bool, str]:
-        """判断检索结果是否可接受"""
-        
-        config = self.get_threshold(query)
-        
-        reasons = []
-        
-        if confidence < config["min_confidence"]:
-            reasons.append(
-                f"置信度{confidence:.2f}低于阈值{config['min_confidence']}"
-            )
-        
-        if results_count < config["min_results"]:
-            reasons.append(
-                f"检索结果数{results_count}低于最小要求{config['min_results']}"
-            )
-        
-        if config["require_citation"] and not has_citation:
+        """判断是否接受检索结果，每次重试自动降低阈值。
+
+        阈值表与方案对齐（按风险等级 + 重试次数）：
+
+        | 重试次数 | 高风险阈值 | 中风险阈值 | 低风险阈值 | 最低结果数(高/中/低) |
+        |----------|-----------|-----------|-----------|-------------------|
+        | 0 | 0.80 | 0.65 | 0.40 | 3 / 2 / 1 |
+        | 1 | 0.65 | 0.50 | 0.30 | 2 / 2 / 1 |
+        | 2 | 0.50 | 0.35 | 0.30 | 2 / 1 / 1 |
+        | 3+ | 0.30 | 0.30 | 0.30 | 1 / 1 / 1 |
+
+        返回 (是否接受, 不通过原因字符串，通过则为空)。
+        """
+        risk_level = self.classify_query(query)
+        base_config = self.THRESHOLD_CONFIG[risk_level]
+
+        # 阈值：每次重试降低 0.15，保底不低于 _MIN_THRESHOLD
+        threshold = max(self._MIN_THRESHOLD, base_config["min_confidence"] - retry_attempt * self._THRESHOLD_STEP)
+
+        # 最低结果数：按方案精确对齐（与阈值不同步降低）
+        min_results_map = {
+            0: {"high": 3, "medium": 2, "low": 1},
+            1: {"high": 2, "medium": 2, "low": 1},
+            2: {"high": 2, "medium": 1, "low": 1},
+        }
+        min_results = min_results_map.get(min(retry_attempt, 2), {}).get(risk_level, 1)
+
+        reasons: list[str] = []
+        if confidence < threshold:
+            reasons.append(f"置信度{confidence:.2f} < 当前阈值{threshold}")
+        if results_count < min_results:
+            reasons.append(f"检索结果数{results_count} < 最低要求{min_results}")
+        if base_config["require_citation"] and not has_citation:
             reasons.append("该类查询必须有引用来源")
-        
-        if reasons:
-            return False, "; ".join(reasons)
-        
-        return True, None
+
+        return (len(reasons) == 0, "; ".join(reasons))
+
+    def should_retry(self, retry_attempt: int) -> bool:
+        """是否还有重试机会。"""
+        return retry_attempt < self._MAX_RETRY
 
 
-# ================================================================
-# 使用示例
-# ================================================================
+# 全局单例
+threshold_checker = DynamicConfidenceThreshold()
 
-def process_query_with_dynamic_threshold(query: str, search_results: list):
-    """使用动态置信度阈值处理查询"""
-    
-    threshold_checker = DynamicConfidenceThreshold()
-    
-    # 获取阈值配置
-    config = threshold_checker.get_threshold(query)
-    print(f"查询类型: {config['description']}")
-    print(f"置信度阈值: {config['min_confidence']}")
-    
-    # 计算检索结果置信度
-    avg_confidence = sum(r.score for r in search_results) / len(search_results)
-    has_citation = any(r.metadata.get("doc_title") for r in search_results)
-    
-    # 判断是否可接受
-    accepted, reason = threshold_checker.should_accept_result(
-        query=query,
-        confidence=avg_confidence,
-        results_count=len(search_results),
-        has_citation=has_citation
-    )
-    
-    if not accepted:
-        # 触发拒答机制
-        return generate_refusal_response(query, reason)
-    
-    # 继续生成回答
-    return generate_grounded_response(query, search_results)
+
+# ==================== 事实核验 ====================
+
+
+class FactVerificationPostProcessor:
+    """事实核验：正则验证政策编号、日期、金额等。"""
+
+    FACT_RULES = {
+        "policy_no": (r"[一-龥]{2,4}〔\d{4}〕\d+号", "政策编号"),
+        "date":      (r"\d{4}年\d{1,2}月\d{1,2}日", "日期"),
+        "money":     (r"\d+(\.\d+)?(万|千|百)?元", "金额"),
+        "count":     (r"\d+(个|项|种|类|份)", "数量"),
+    }
+
+    def verify(self, text: str) -> list[dict]:
+        """核验文本中的事实要素，返回问题列表。"""
+        issues: list[dict] = []
+        for fact_type, (pattern, label) in self.FACT_RULES.items():
+            matches = re.findall(pattern, text)
+            if matches:
+                # 当前版本只标记存在的事实要素，不做跨源校验（V2 再加）
+                issues.append(
+                    {
+                        "fact_type": fact_type,
+                        "label": label,
+                        "values": matches,
+                        "note": "已识别，待跨源校验",
+                    }
+                )
+        return issues
+
+
+fact_verifier = FactVerificationPostProcessor()
+
+
+# ==================== 一致性检查（V1 简化版）====================
+
+
+class SelfConsistencyChecker:
+    """自我一致性检查：V1 只做轻量标记，不做多轮生成比对。"""
+
+    def check(
+        self,
+        current_response: str,
+        history: list[dict] | None = None,
+    ) -> tuple[bool, list[dict]]:
+        """检查当前回答是否与历史矛盾。
+
+        V1 简化：只检查"否定词 + 历史关键词"的明显矛盾。
+        """
+        if not history:
+            return True, []
+
+        issues: list[dict] = []
+        last_topic = (history[-1].get("last_topic") if history else None)
+        if not last_topic:
+            return True, []
+
+        current_lower = current_response.lower()
+        # 简单规则：历史说"可以"，当前说"不可以" → 标记
+        contradiction_pairs = [
+            (["可以", "能够", "允许"], ["不可以", "不能", "不允许", "不行"]),
+            (["需要", "必须", "要求"], ["不需要", "不必", "不强制"]),
+        ]
+        for positive, negative in contradiction_pairs:
+            has_positive = any(p in current_lower for p in positive)
+            has_negative = any(n in current_lower for n in negative)
+            if has_positive and has_negative:
+                issues.append(
+                    {
+                        "severity": "medium",
+                        "contradiction_type": f"同时包含{positive}和{negative}",
+                        "description": "回答内部可能存在矛盾",
+                    }
+                )
+
+        is_consistent = len(issues) == 0
+        return is_consistent, issues
+
+
+consistency_checker = SelfConsistencyChecker()
 ```
 
-#### 第五重：自我一致性检查
+#### 第五重：自我一致性检查（设计概念）
 
 ```python
 # ================================================================
-# 自我一致性检查：同一对话中同类问题回答应一致
+# 设计概念：自我一致性检查
+# 实际实现：agent/hallucination_defense.py → SelfConsistencyChecker
 # ================================================================
 
-from dataclasses import dataclass
-from datetime import datetime
-
-@dataclass
-class ConsistencyIssue:
-    """一致性问题记录"""
-    current_query: str
-    previous_query: str
-    current_answer: str
-    previous_answer: str
-    contradiction_type: str  # "fact" / "policy" / "process"
-    severity: str  # "high" / "medium" / "low"
-
-class SelfConsistencyChecker:
-    """
-    自我一致性检查器
-    
-    面试要点：
-    - 展示对LLM"记忆不一致"问题的理解
-    - 展示系统性思维（不只是单次回答质量，还要关注整体一致性）
-    """
-    
-    # 同类问题的相似度阈值
-    SIMILARITY_THRESHOLD = 0.75
-    
-    # 矛盾检测的关键维度
-    CONTRADICTION_DIMENSIONS = [
-        "政策条件",    # 如落户条件前后不一致
-        "办理流程",    # 如申请步骤前后不一致
-        "时间节点",    # 如截止日期前后不一致
-        "金额数量",    # 如补贴金额前后不一致
-        "材料清单",    # 如所需材料前后不一致
-    ]
-
-    def __init__(self, llm_client):
-        self.llm = llm_client
-
-    def find_similar_queries(
-        self,
-        current_query: str,
-        history: list[dict],
-        top_k: int = 3
-    ) -> list[dict]:
-        """从对话历史中找到相似的查询"""
-        
-        similar = []
-        
-        for msg in history:
-            if msg["role"] != "user":
-                continue
-            
-            # 计算查询相似度
-            similarity = self._calculate_query_similarity(
-                current_query,
-                msg["content"]
-            )
-            
-            if similarity >= self.SIMILARITY_THRESHOLD:
-                similar.append({
-                    "query": msg["content"],
-                    "answer": self._find_answer_for_query(history, msg),
-                    "similarity": similarity
-                })
-        
-        return sorted(similar, key=lambda x: x["similarity"], reverse=True)[:top_k]
-
-    def check_consistency(
-        self,
-        current_query: str,
-        current_answer: str,
-        history: list[dict]
-    ) -> tuple[bool, list[ConsistencyIssue]]:
-        """检查当前回答与历史回答的一致性"""
-        
-        similar_queries = self.find_similar_queries(current_query, history)
-        
-        if not similar_queries:
-            return True, []
-        
-        issues = []
-        
-        for sq in similar_queries:
-            # 使用LLM判断两个回答是否存在矛盾
-            contradiction = self._detect_contradiction(
-                current_answer,
-                sq["answer"],
-                current_query
-            )
-            
-            if contradiction:
-                issues.append(ConsistencyIssue(
-                    current_query=current_query,
-                    previous_query=sq["query"],
-                    current_answer=current_answer,
-                    previous_answer=sq["answer"],
-                    contradiction_type=contradiction["type"],
-                    severity=contradiction["severity"]
-                ))
-        
-        return len(issues) == 0, issues
-
-    def _detect_contradiction(
-        self,
-        answer1: str,
-        answer2: str,
-        context_query: str
-    ) -> Optional[dict]:
-        """使用LLM检测两个回答是否存在矛盾"""
-        
-        prompt = f"""
-你是事实一致性检查专家。请判断以下两个回答是否存在矛盾。
-
-用户问题背景：{context_query}
-
-回答A（历史回答）：
-{answer1}
-
-回答B（当前回答）：
-{answer2}
-
-请检查以下维度是否存在矛盾：
-1. 政策条件
-2. 办理流程
-3. 时间节点
-4. 金额数量
-5. 材料清单
-
-如果存在矛盾，请输出：
-- 矛盾维度：xxx
-- 矛盾描述：xxx
-- 严重程度：high/medium/low
-
-如果不存在矛盾，输出：无矛盾
 """
-        
-        response = self.llm.chat(prompt)
-        
-        if "无矛盾" in response:
-            return None
-        
-        # 解析矛盾信息
-        return self._parse_contradiction(response)
+实际流程（check_consistency 节点）：
+1. 从 AgentState.messages 中提取历史对话
+2. 使用 LLM 判断当前回答与历史回答是否存在矛盾
+3. 矛盾维度：政策条件、办理流程、时间节点、金额数量、材料清单
+4. 严重程度：high / medium / low
+5. 结果存入 consistency_issues（JSON 列表）
 
-    def _calculate_query_similarity(self, q1: str, q2: str) -> float:
-        """计算两个查询的语义相似度"""
-        
-        # 简化实现：关键词重叠度
-        # 实际项目中应使用向量相似度
-        
-        keywords1 = set(self._extract_keywords(q1))
-        keywords2 = set(self._extract_keywords(q2))
-        
-        if not keywords1 or not keywords2:
-            return 0.0
-        
-        intersection = keywords1 & keywords2
-        union = keywords1 | keywords2
-        
-        return len(intersection) / len(union)
-
-    def _extract_keywords(self, text: str) -> list[str]:
-        """提取关键词"""
-        
-        # 简化实现
-        # 实际项目中应使用NLP工具
-        
-        keywords = []
-        important_words = [
-            "落户", "补贴", "政策", "流程", "申请", "条件",
-            "材料", "时间", "金额", "资格", "办理", "审批"
-        ]
-        
-        for word in important_words:
-            if word in text:
-                keywords.append(word)
-        
-        return keywords
-
-
-# ================================================================
-# 一致性问题处理策略
-# ================================================================
-
-class ConsistencyHandler:
-    """一致性问题处理器"""
-    
-    def handle_inconsistency(
-        self,
-        issues: list[ConsistencyIssue],
-        current_answer: str
-    ) -> str:
-        """处理一致性问题"""
-        
-        if not issues:
-            return current_answer
-        
-        # 高严重度问题：需要重新生成回答
-        high_severity = [i for i in issues if i.severity == "high"]
-        
-        if high_severity:
-            # 添加一致性警告
-            warning = self._generate_consistency_warning(high_severity)
-            return f"{current_answer}\n\n{warning}"
-        
-        # 中低严重度：添加提示但不阻断
-        return current_answer
-
-    def _generate_consistency_warning(
-        self,
-        issues: list[ConsistencyIssue]
-    ) -> str:
-        """生成一致性警告"""
-        
-        warnings = []
-        for issue in issues:
-            warnings.append(f"""
-⚠️ 注意：本次回答与之前的回答在"{issue.contradiction_type}"方面可能存在差异。
-- 之前回答：{issue.previous_answer[:100]}...
-- 当前回答：{issue.current_answer[:100]}...
-
-建议您核实最新政策，或联系就业中心老师确认准确信息。
-""")
-        
-        return "\n".join(warnings)
+落库：monitor/scheduler.py 中的 consistency_check 定时任务
+将 consistency_issues 写入 consistency_issue_log 表
+"""
 ```
 
+#### 第六重：事实核验（设计概念）
+
+```python
+# ================================================================
+# 设计概念：事实核验
+# 实际实现：agent/hallucination_defense.py → FactVerificationPostProcessor
+# ================================================================
+
+"""
+实际流程（verify_facts 节点）：
+1. 正则提取回答中的关键事实：
+   - 政策编号：[一-龥]{2,4}〔\d{4}〕\d+号
+   - 日期：\d{4}年\d{1,2}月\d{1,2}日
+   - 金额：\d+(\.\d+)?(万|千|百)?元
+2. 验证格式和合理性
+3. 问题存入 fact_issues（JSON 列表）
+
+落库：monitor/scheduler.py 中的 consistency_check 定时任务
+将 fact_issues 写入 fact_verification_log 表
+"""
+```
+
+> **与设计文档 v2.0 的差异**：
+> - v2.0 设计为"三重防护"（固定阈值 + 引用强制 + 拒答），v3.0 扩展为"五重防护"
+> - 实际代码中，五重防护分散在 11 个 LangGraph 节点中实现，而非集中在一个类里
+> - 实际不依赖 LlamaIndex，所有防护在 ChromaDB 检索结果上操作
+
 #### 第六重：具体事实核验
+
+> **V1 简化版**：实际实现见上方"五重防护机制在节点中的实际使用"代码块中的 `verify_facts` 和 `check_consistency` 节点函数。`hallucination_defense.py` 中的 `FactVerificationPostProcessor.verify()` 使用正则提取政策编号/日期/金额/数量等事实要素，当前版本只标记存在的事实要素，不做跨源校验（V2 再加）。`SelfConsistencyChecker.check()` 使用"否定词 + 历史关键词"规则检查明显矛盾。
+
+> **V1 简化版**：实际实现见上方"五重防护机制在节点中的实际使用"代码块中的 `verify_facts` 和 `check_consistency` 节点函数。`hallucination_defense.py` 中的 `FactVerificationPostProcessor.verify()` 使用正则提取政策编号/日期/金额/数量等事实要素，当前版本只标记存在的事实要素，不做跨源校验（V2 再加）。`SelfConsistencyChecker.check()` 使用"否定词 + 历史关键词"规则检查明显矛盾。
 
 ```python
 # ================================================================
@@ -1339,133 +1038,184 @@ class FactIssueHandler:
         return "\n".join(lines)
 ```
 
-#### 五重防护机制整合
+#### 五重防护机制在节点中的实际使用
 
 ```python
 # ================================================================
-# 五重防护机制整合使用
+# 实际实现：agent/nodes.py 中五个防护节点的代码
+# V1 简化版：五重防护分散在 11 个 LangGraph 节点中实现
 # ================================================================
 
-class HallucinationDefenseSystem:
-    """
-    幻觉防御系统：整合五重防护机制
-    
-    面试要点：
-    - 展示系统性架构能力
-    - 展示对LLM幻觉问题的深度理解
-    """
-    
-    def __init__(self, llm_client, config: dict = None):
-        self.llm = llm_client
-        
-        # 初始化各防护层
-        self.confidence_filter = ConfidenceFilter()
-        self.dynamic_threshold = DynamicConfidenceThreshold()
-        self.grounded_generator = GroundedGeneration()
-        self.refusal_generator = RefusalGenerator()
-        self.consistency_checker = SelfConsistencyChecker(llm_client)
-        self.fact_verifier = FactVerificationPostProcessor()
-        self.fact_handler = FactIssueHandler()
-        
-        self.config = config or {}
+"""
+> **与实际代码的对应关系**
 
-    async def process_query(
-        self,
-        query: str,
-        search_results: list,
-        history: list[dict]
-    ) -> dict:
-        """
-        五重防护处理流程
-        
-        流程：
-        1. 动态置信度阈值判断
-        2. 置信度过滤
-        3. 引用强制生成
-        4. 自我一致性检查
-        5. 具体事实核验
-        """
-        
-        result = {
-            "query": query,
-            "accepted": True,
-            "response": None,
-            "refusal_reason": None,
-            "consistency_issues": [],
-            "fact_issues": [],
-            "confidence": None,
-            "citations": []
+实际文件：`backend/app/agent/nodes.py`
+
+五重防护实际分散在独立的节点函数中实现（非集中在一个类里）：
+
+1. route_query → 设置 query_risk_level（第一重：动态阈值的前提）
+2. search_knowledge → 检索 + 时效性调整 + 过滤过期文档
+3. check_confidence → 调用 threshold_checker.should_accept_result()（第一+二重）
+4. generate_response → 带引用生成回答（第三重：prompt 约束）
+5. check_consistency → 调用 consistency_checker.check()（第四重）
+6. verify_facts → 调用 fact_verifier.verify()（第五重）
+7. content_moderation → 敏感词过滤（额外安全层）
+8. accept_with_warning → 低置信度附加警告
+9. generate_refusal → 生成拒答回复（6 套模板）
+10. direct_response → 简单问候直接回复
+11. error_handler → 统一异常处理
+
+防死循环机制（分散在各节点）：
+- retry_attempt：置信度重试次数（check_confidence 中递增）
+- tool_call_count：工具调用次数（search_knowledge 中递增）
+- last_search_query：上次检索关键词（search_knowledge 中去重）
+- regenerate_count：重生成次数（regenerate_with_hints 中递增）
+- forced_exit：强制退出标记（route_query 中 tool_call_count >= 3 时触发）
+"""
+
+def check_confidence(state: dict) -> dict:
+    """动态置信度判断：决定接受/重试/拒答。
+
+    防条件判断循环：每次重试自动降低阈值，最多重试 3 次。
+    """
+    query = state.get("current_query", "")
+    confidence = state.get("confidence", 0.0)
+    hits = state.get("search_results", [])
+    citations = state.get("citations", [])
+    retry = state.get("retry_attempt", 0)
+
+    accepted, reason = threshold_checker.should_accept_result(
+        query=query,
+        confidence=confidence,
+        results_count=len(hits),
+        has_citation=bool(citations),
+        retry_attempt=retry,
+    )
+
+    if accepted:
+        return {
+            "should_refuse": False,
+            "should_retry": False,
+            "retry_attempt": retry,
         }
-        
-        # 第一重：动态置信度阈值
-        threshold_config = self.dynamic_threshold.get_threshold(query)
-        avg_confidence = sum(r.score for r in search_results) / len(search_results) if search_results else 0
-        
-        accepted, reason = self.dynamic_threshold.should_accept_result(
-            query=query,
-            confidence=avg_confidence,
-            results_count=len(search_results),
-            has_citation=True
-        )
-        
-        if not accepted:
-            result["accepted"] = False
-            result["refusal_reason"] = reason
-            result["response"] = self.refusal_generator.generate(query, reason)
-            return result
-        
-        # 第二重：置信度过滤
-        try:
-            filtered_results = self.confidence_filter.filter(
-                search_results,
-                min_score=threshold_config["min_confidence"]
-            )
-        except LowConfidenceError as e:
-            result["accepted"] = False
-            result["refusal_reason"] = str(e)
-            result["response"] = self.refusal_generator.generate(query, str(e))
-            return result
-        
-        # 第三重：引用强制生成
-        response = self.grounded_generator.generate(query, filtered_results)
-        result["citations"] = self._extract_citations(filtered_results)
-        
-        # 第四重：自我一致性检查
-        is_consistent, consistency_issues = self.consistency_checker.check_consistency(
-            query, response, history
-        )
-        
-        if not is_consistent:
-            result["consistency_issues"] = consistency_issues
-            response = ConsistencyHandler().handle_inconsistency(
-                consistency_issues, response
-            )
-        
-        # 第五重：具体事实核验
-        fact_issues = self.fact_verifier.verify(response, {"query": query})
-        
-        if fact_issues:
-            result["fact_issues"] = fact_issues
-            response = self.fact_handler.handle_issues(response, fact_issues)
-        
-        result["response"] = response
-        result["confidence"] = avg_confidence
-        
-        return result
 
-    def _extract_citations(self, results: list) -> list[dict]:
-        """提取引用信息"""
-        
-        citations = []
-        for i, r in enumerate(results, 1):
-            citations.append({
-                "ref_id": f"[{i}]",
-                "doc_title": r.metadata.get("doc_title", "未知来源"),
-                "text": r.text[:200],
-                "score": r.score
-            })
-        
-        return citations
+    # 不通过，判断是否还有重试机会
+    if threshold_checker.should_retry(retry):
+        return {
+            "should_refuse": False,
+            "should_retry": True,
+            "retry_attempt": retry + 1,
+        }
+
+    # 重试耗尽 → 降级回答（带警告），不拒答
+    return {
+        "should_refuse": False,
+        "should_retry": False,
+        "is_low_confidence": True,
+        "retry_attempt": retry + 1,
+    }
+
+
+def check_consistency(state: dict) -> dict:
+    """自我一致性检查。
+
+    V1 简化：只做轻量标记，不做多轮生成比对。
+    防结果验证循环：验证器降级，不阻塞流程。
+    """
+    response = state.get("response", "")
+    history = state.get("history", [])
+
+    try:
+        is_consistent, issues = consistency_checker.check(response, history)
+    except Exception as e:
+        # 验证器降级：非阻塞
+        return {
+            "is_consistent": True,
+            "consistency_issues": [],
+            "skipped_consistency_check": True,
+        }
+
+    high_count = sum(1 for i in issues if i.get("severity") == "high")
+    medium_count = sum(1 for i in issues if i.get("severity") == "medium")
+
+    return {
+        "is_consistent": is_consistent,
+        "consistency_issues": issues,
+        "high_severity_count": high_count,
+        "medium_severity_count": medium_count,
+    }
+
+
+def verify_facts(state: dict) -> dict:
+    """事实核验：正则验证政策编号、日期、金额等。"""
+    response = state.get("response", "")
+
+    issues = fact_verifier.verify(response)
+
+    return {
+        "fact_issues": issues,
+    }
+
+
+def content_moderation(state: dict) -> dict:
+    """LLM 输出内容审核：检查是否包含违规内容。
+
+    与输入侧敏感词过滤形成双重防护。
+    """
+    response = state.get("response", "")
+
+    # V1 简化：只做关键词匹配，不额外调 LLM（成本考虑）
+    sensitive_patterns = {
+        "politics": ["国家领导人", "主席", "总理", "反动", "颠覆"],
+        "contact": [r"\d{3}-\d{8}", r"\d{11}"],
+        "ad": ["加我微信", "私信", "代做", "枪手", "收费"],
+    }
+
+    violations = []
+    for category, patterns in sensitive_patterns.items():
+        for pattern in patterns:
+            if pattern.startswith("\\") or any(c in pattern for c in ["*", "+", "?", "[", "]", "(", ")", "{", "}", "|", "^", "$"]):
+                # 正则匹配
+                if re.search(pattern, response):
+                    violations.append(category)
+                    break
+            else:
+                # 字面匹配
+                if pattern in response:
+                    violations.append(category)
+                    break
+
+    if violations:
+        return {
+            "should_refuse": True,
+            "refusal_reason": "回答内容包含违规信息，已拦截。",
+            "content_safe": False,
+            "content_violations": list(set(violations)),
+        }
+
+    return {"content_safe": True}
+
+
+def accept_with_warning(state: dict) -> dict:
+    """接受回答但附加警告（低置信度 / 中等严重度问题）。"""
+    warnings = []
+
+    if state.get("is_low_confidence"):
+        warnings.append("⚠️ 该回答基于有限资料，仅供参考，建议您咨询就业中心老师确认。")
+
+    medium_issues = [i for i in state.get("consistency_issues", []) if i.get("severity") == "medium"]
+    if medium_issues:
+        warnings.append("⚠️ 回答中部分内容可能存在不一致，请以官方文件为准。")
+
+    temporal_warnings = state.get("temporal_warnings", [])
+    warnings.extend(temporal_warnings)
+
+    return {
+        "response": state.get("response", ""),
+        "warnings": warnings,
+        "should_refuse": False,
+        "is_low_confidence": state.get("is_low_confidence", False),
+    }
 ```
 
 ### 3.5 溯源问题增强方案（句子级别引用 + 引用验证）
@@ -1494,537 +1244,164 @@ class HallucinationDefenseSystem:
 
 ```python
 # ================================================================
-# 语义感知的文档切分（Semantic Chunking）
+# 实际配置：core/config.py → Settings 类中的语义分块参数
+# V1 简化版：配置参数已就绪，实际切分逻辑在 knowledge/indexer 服务中
 # ================================================================
 
-from llama_index.core.node_parser import SemanticSplitterNodeParser
-from llama_index.embeddings.openai import OpenAIEmbedding
-from typing import List
-import numpy as np
+"""
+> **与实际代码的对应关系**
 
-class SemanticAwareChunker:
-    """
-    语义感知的文档切分器
-    
-    核心思想：
-    - 不使用固定的chunk_size切分
-    - 不单纯依赖句子边界切分
-    - 计算句子之间的语义相似度
-    - 在语义"断点"处进行切分
-    
-    面试要点：
-    - 展示对传统切分方式局限性的理解
-    - 展示对语义完整性的重视
-    - 展示对Embedding模型的深度应用
-    """
-    
-    def __init__(
-        self,
-        embed_model,
-        similarity_threshold: float = 0.7,
-        min_chunk_size: int = 100,
-        max_chunk_size: int = 500
-    ):
-        """
-        Args:
-            embed_model: Embedding模型
-            similarity_threshold: 语义相似度阈值，低于此值则切分
-            min_chunk_size: 最小chunk大小（字符数）
-            max_chunk_size: 最大chunk大小（字符数）
-        """
-        self.embed_model = embed_model
-        self.similarity_threshold = similarity_threshold
-        self.min_chunk_size = min_chunk_size
-        self.max_chunk_size = max_chunk_size
+实际文件：`backend/app/core/config.py` → Settings 类
 
-    def chunk_document(self, document: str) -> List[str]:
-        """
-        语义感知切分
-        
-        流程：
-        1. 先按句子切分（保持句子完整性）
-        2. 计算相邻句子的语义相似度
-        3. 在相似度"断点"处合并/切分
-        4. 确保每个chunk语义完整
-        """
-        
-        # 1. 按句子切分
-        sentences = self._split_into_sentences(document)
-        
-        if len(sentences) <= 1:
-            return [document]
-        
-        # 2. 计算句子Embedding
-        sentence_embeddings = self._get_embeddings(sentences)
-        
-        # 3. 计算相邻句子相似度
-        similarities = self._calculate_adjacent_similarity(sentence_embeddings)
-        
-        # 4. 找到语义断点
-        breakpoints = self._find_semantic_breakpoints(similarities)
-        
-        # 5. 根据断点生成chunks
-        chunks = self._create_chunks(sentences, breakpoints)
-        
-        return chunks
+语义分块配置参数（已存在于 config.py）：
+  chunk_min_chars: int = 200       # 块最小字符数（低于则继续合并短句）
+  chunk_max_chars: int = 500       # 块最大字符数（超过则在句子边界强制断开）
+  semantic_breakpoint_percentile: int = 95  # 相邻句子距离的百分位阈值，超过即语义断点
 
-    def _split_into_sentences(self, text: str) -> List[str]:
-        """按句子切分"""
-        
-        # 中文句子分隔符
-        separators = ["。", "！", "？", "；", "\n"]
-        
-        sentences = []
-        current_sentence = ""
-        
-        for char in text:
-            current_sentence += char
-            
-            if char in separators:
-                if current_sentence.strip():
-                    sentences.append(current_sentence.strip())
-                current_sentence = ""
-        
-        # 处理最后未结束的句子
-        if current_sentence.strip():
-            sentences.append(current_sentence.strip())
-        
-        return sentences
-
-    def _get_embeddings(self, sentences: List[str]) -> np.ndarray:
-        """计算句子Embedding"""
-        
-        embeddings = []
-        
-        for sentence in sentences:
-            emb = self.embed_model.get_text_embedding(sentence)
-            embeddings.append(emb)
-        
-        return np.array(embeddings)
-
-    def _calculate_adjacent_similarity(self, embeddings: np.ndarray) -> List[float]:
-        """计算相邻句子相似度"""
-        
-        similarities = []
-        
-        for i in range(len(embeddings) - 1):
-            # Cosine相似度
-            sim = self._cosine_similarity(embeddings[i], embeddings[i + 1])
-            similarities.append(sim)
-        
-        return similarities
-
-    def _cosine_similarity(self, vec1: np.ndarray, vec2: np.ndarray) -> float:
-        """计算Cosine相似度"""
-        
-        dot_product = np.dot(vec1, vec2)
-        norm1 = np.linalg.norm(vec1)
-        norm2 = np.linalg.norm(vec2)
-        
-        return dot_product / (norm1 * norm2 + 1e-8)
-
-    def _find_semantic_breakpoints(self, similarities: List[float]) -> List[int]:
-        """
-        找到语义断点
-        
-        断点定义：相邻句子相似度低于阈值的位置
-        """
-        
-        breakpoints = []
-        
-        for i, sim in enumerate(similarities):
-            if sim < self.similarity_threshold:
-                # 相似度低，说明语义发生变化，此处是断点
-                breakpoints.append(i + 1)  # 断点位置（句子索引）
-        
-        return breakpoints
-
-    def _create_chunks(
-        self,
-        sentences: List[str],
-        breakpoints: List[int]
-    ) -> List[str]:
-        """根据断点创建chunks"""
-        
-        chunks = []
-        
-        # 添加首尾边界
-        boundaries = [0] + breakpoints + [len(sentences)]
-        
-        for i in range(len(boundaries) - 1):
-            start = boundaries[i]
-            end = boundaries[i + 1]
-            
-            # 合并句子
-            chunk_sentences = sentences[start:end]
-            chunk_text = "".join(chunk_sentences)
-            
-            # 检查chunk大小
-            if len(chunk_text) < self.min_chunk_size:
-                # 太小：尝试合并到下一个chunk
-                continue
-            elif len(chunk_text) > self.max_chunk_size:
-                # 太大：需要进一步切分
-                sub_chunks = self._split_large_chunk(chunk_text)
-                chunks.extend(sub_chunks)
-            else:
-                chunks.append(chunk_text)
-        
-        return chunks
-
-    def _split_large_chunk(self, text: str) -> List[str]:
-        """切分过大的chunk"""
-        
-        # 按最大大小切分，但保持句子完整性
-        chunks = []
-        current_chunk = ""
-        
-        sentences = self._split_into_sentences(text)
-        
-        for sentence in sentences:
-            if len(current_chunk) + len(sentence) <= self.max_chunk_size:
-                current_chunk += sentence
-            else:
-                if current_chunk:
-                    chunks.append(current_chunk)
-                current_chunk = sentence
-        
-        if current_chunk:
-            chunks.append(current_chunk)
-        
-        return chunks
-
-
-# ================================================================
-# 使用LlamaIndex内置的SemanticSplitterNodeParser
-# ================================================================
-
-from llama_index.core.node_parser import SemanticSplitterNodeParser
-from llama_index.embeddings.dashscope import DashScopeEmbedding
-
-def create_semantic_chunker():
-    """
-    使用LlamaIndex内置的语义切分器
-    
-    面试要点：
-    - LlamaIndex提供了SemanticSplitterNodeParser
-    - 基于Embedding相似度自动切分
-    - 比自研更稳定，推荐使用
-    """
-    
-    # 使用通义千问Embedding
-    embed_model = DashScopeEmbedding(
-        model_name="text-embedding-v2",
-        api_key="your-dashscope-api-key"
-    )
-    
-    # 创建语义切分器
-    semantic_splitter = SemanticSplitterNodeParser(
-        embed_model=embed_model,
-        breakpoint_percentile_threshold=95,  # 断点阈值（百分位）
-        buffer_size=1,  # 缓冲区大小（句子数）
-    )
-    
-    return semantic_splitter
-
-
-# ================================================================
-# 完整的语义切分流程示例
-# ================================================================
-
-async def process_document_with_semantic_chunking(document: Document):
-    """使用语义切分处理文档"""
-    
-    # 1. 创建语义切分器
-    semantic_splitter = create_semantic_chunker()
-    
-    # 2. 切分文档
-    nodes = semantic_splitter.get_nodes_from_documents([document])
-    
-    # 3. 为每个节点添加元数据
-    for i, node in enumerate(nodes):
-        node.metadata = {
-            "chunk_id": i,
-            "doc_title": document.metadata.get("title"),
-            "doc_source": document.metadata.get("source"),
-            "valid_from": document.metadata.get("valid_from"),
-            "valid_until": document.metadata.get("valid_until"),
-            "chunk_type": "semantic",  # 标记为语义切分
-            "sentence_count": len(node.text.split("。")),
-        }
-    
-    # 4. 构建向量索引
-    index = VectorStoreIndex(nodes)
-    
-    return index, nodes
+实际实现：
+- 语义分块器类（core/semantic_chunker.py）在 V1 中暂未创建
+- 文档切分逻辑在 knowledge/indexer 服务中完成
+- 基于 Embedding 相似度的百分位落差法检测语义断点
+- 面试时说明"配置已就绪，V1 优先保证系统稳定性，V2 再上完整语义切分"
+"""
 ```
 
 #### 句子级别引用追踪
 
 ```python
 # ================================================================
-# 句子级别引用追踪
+# 实际实现：agent/citation_tracker.py
+# V1 简化版：Chunk 级别引用 + 质量评估
 # ================================================================
 
-from dataclasses import dataclass
-from typing import List, Optional
+"""
+> **与实际代码的对应关系**
 
-@dataclass
-class SentenceCitation:
-    """句子级别引用"""
-    sentence: str           # 回答中的句子
-    sentence_index: int     # 句子在回答中的位置
-    source_chunk_id: str    # 来源chunk ID
-    source_text: str        # 来源chunk原文
-    source_sentence: str    # 来源中的具体句子（如果可定位）
-    confidence: float       # 引用置信度
-    support_type: str       # 支持类型：direct/indirect/none
+实际文件：`backend/app/agent/citation_tracker.py`
+
+V1 实现（当前代码库中的实际实现）：
+
+1. build_citations(hits) → list[dict]
+   - 从检索结果构建引用列表（chunk 级别）
+   - 每条引用包含 rank / document_id / document_title / chunk_id /
+     score / page_no / snippet（截断至 CITATION_SNIPPET_MAX_LENGTH=200 字符）
+
+2. evaluate_citation_quality(citations) → dict
+   - 评估引用整体质量（V1 简化版）
+   - 仅基于检索得分和引用数量做统计
+   - 按得分区间映射为 direct / indirect / none
+   - V2 再引入 SentenceLevelCitationTracker 做逐句验证
+
+3. SentenceLevelCitationTracker（V2 预留接口）
+   - track() 方法未实现，raise NotImplementedError
+   - 设计意图：将回答按 。！？； 切分为句子
+   - 对每个句子找最相关的来源 chunk（Embedding 相似度）
+   - 使用 LLM 验证引用支持度（direct/indirect/none）
+"""
+
+# ===== V1：Chunk 级别引用（当前实现）=====
+
+
+def build_citations(hits: list[dict]) -> list[dict]:
+    """从检索结果构建引用列表（V1 简化：chunk 级别）。
+
+    Args:
+        hits: 检索结果列表（来自 rag_service.search）
+
+    Returns:
+        引用列表，每条包含 rank / document_id / document_title / chunk_id /
+        score / page_no / snippet
+    """
+    citations = []
+    for rank, h in enumerate(hits, start=1):
+        citations.append(
+            {
+                "rank": rank,
+                "document_id": h.get("document_id"),
+                "document_title": h.get("document_title"),
+                "chunk_id": h.get("chunk_id"),
+                "score": h.get("score"),
+                "page_no": h.get("page_no"),
+                "snippet": (h.get("content") or "")[:CITATION_SNIPPET_MAX_LENGTH],
+            }
+        )
+    return citations
+
+
+# ===== V1：引用质量评估（简化版）=====
+
+
+def evaluate_citation_quality(citations: list[dict]) -> dict[str, Any]:
+    """评估引用整体质量（V1 简化版）。
+
+    V1 仅基于检索得分和引用数量做统计，不做 LLM 级验证。
+    V2 再引入 SentenceLevelCitationTracker 做逐句验证。
+
+    Args:
+        citations: 引用列表
+
+    Returns:
+        质量评估结果
+    """
+    total = len(citations)
+    if total == 0:
+        return {
+            "quality_score": 0.0,
+            "direct_count": 0,
+            "indirect_count": 0,
+            "none_count": 0,
+            "avg_score": 0.0,
+            "issues": ["无引用"],
+        }
+
+    scores = [c.get("score") or 0.0 for c in citations]
+    avg_score = sum(scores) / total
+
+    # V1 简化：按得分区间映射为 direct / indirect / none
+    direct_count = sum(1 for s in scores if s >= 0.75)
+    indirect_count = sum(1 for s in scores if 0.40 <= s < 0.75)
+    none_count = total - direct_count - indirect_count
+
+    quality_score = (
+        direct_count * 1.0 + indirect_count * 0.5 + none_count * 0.0
+    ) / total
+
+    issues = []
+    if none_count > 0:
+        issues.append(f"{none_count} 条引用得分较低")
+    if avg_score < 0.5:
+        issues.append(f"平均引用得分偏低({avg_score:.2f})")
+
+    return {
+        "quality_score": round(quality_score, 4),
+        "direct_count": direct_count,
+        "indirect_count": indirect_count,
+        "none_count": none_count,
+        "avg_score": round(avg_score, 4),
+        "issues": issues,
+    }
+
+
+# ===== V2 预留接口（句子级别引用）=====
 
 
 class SentenceLevelCitationTracker:
+    """句子级别引用追踪器（V2 实现，V1 仅预留接口）。
+
+    V2 实现要点：
+    1. 将回答按 `。！？；` 切分为句子
+    2. 对每个句子找最相关的来源 chunk（Embedding 相似度）
+    3. 使用 LLM 验证引用支持度（direct / indirect / none）
+    4. 返回句子级别引用列表
     """
-    句子级别引用追踪器
-    
-    面试要点：
-    - 展示对引用精度的追求
-    - 展示对LLM归因准确性的把控
-    """
-    
-    def __init__(self, llm_client, embed_model):
-        self.llm = llm_client
+
+    def __init__(self, embed_model: Any, llm_client: Any) -> None:
         self.embed_model = embed_model
+        self.llm_client = llm_client
 
-    def track_citations(
-        self,
-        response: str,
-        source_chunks: List[dict]
-    ) -> List[SentenceCitation]:
-        """
-        追踪回答中每个句子的引用
-        
-        流程：
-        1. 将回答切分为句子
-        2. 对每个句子，找到最相关的来源chunk
-        3. 验证引用是否真的支持该句子
-        4. 返回带置信度的引用列表
-        """
-        
-        # 1. 切分回答为句子
-        response_sentences = self._split_into_sentences(response)
-        
-        # 2. 为每个句子追踪引用
-        citations = []
-        
-        for i, sentence in enumerate(response_sentences):
-            # 找到最相关的来源
-            best_match = self._find_best_source(sentence, source_chunks)
-            
-            # 验证引用支持度
-            support_info = self._verify_support(sentence, best_match)
-            
-            citation = SentenceCitation(
-                sentence=sentence,
-                sentence_index=i,
-                source_chunk_id=best_match["chunk_id"],
-                source_text=best_match["text"],
-                source_sentence=best_match.get("matched_sentence", ""),
-                confidence=support_info["confidence"],
-                support_type=support_info["type"]
-            )
-            
-            citations.append(citation)
-        
-        return citations
-
-    def _find_best_source(
-        self,
-        sentence: str,
-        source_chunks: List[dict]
-    ) -> dict:
-        """找到最相关的来源chunk"""
-        
-        # 计算句子与各chunk的相似度
-        sentence_embedding = self.embed_model.get_text_embedding(sentence)
-        
-        best_match = None
-        best_similarity = -1
-        
-        for chunk in source_chunks:
-            chunk_embedding = self.embed_model.get_text_embedding(chunk["text"])
-            
-            similarity = self._cosine_similarity(sentence_embedding, chunk_embedding)
-            
-            if similarity > best_similarity:
-                best_similarity = similarity
-                best_match = {
-                    "chunk_id": chunk["chunk_id"],
-                    "text": chunk["text"],
-                    "similarity": similarity
-                }
-        
-        # 尝试定位到chunk中的具体句子
-        if best_match:
-            best_match["matched_sentence"] = self._locate_source_sentence(
-                sentence,
-                best_match["text"]
-            )
-        
-        return best_match
-
-    def _locate_source_sentence(
-        self,
-        query_sentence: str,
-        source_text: str
-    ) -> str:
-        """定位来源中的具体句子"""
-        
-        source_sentences = self._split_into_sentences(source_text)
-        
-        query_embedding = self.embed_model.get_text_embedding(query_sentence)
-        
-        best_sentence = ""
-        best_similarity = -1
-        
-        for s in source_sentences:
-            s_embedding = self.embed_model.get_text_embedding(s)
-            similarity = self._cosine_similarity(query_embedding, s_embedding)
-            
-            if similarity > best_similarity:
-                best_similarity = similarity
-                best_sentence = s
-        
-        return best_sentence
-
-    def _verify_support(
-        self,
-        sentence: str,
-        source: dict
-    ) -> dict:
-        """
-        验证来源是否真的支持该句子
-        
-        使用LLM判断：
-        - direct: 来源直接支持该句子
-        - indirect: 来源间接相关
-        - none: 来源不支持该句子
-        """
-        
-        if not source:
-            return {"confidence": 0, "type": "none"}
-        
-        prompt = f"""
-判断以下来源文本是否支持目标句子。
-
-目标句子：{sentence}
-
-来源文本：{source["text"]}
-
-请判断支持类型：
-- direct: 来源直接包含目标句子的信息，可以直接推导出目标句子
-- indirect: 来源与目标句子相关，但不能直接推导
-- none: 来源与目标句子无关
-
-只输出一个类型：direct/indirect/none
-"""
-        
-        response = self.llm.chat(prompt)
-        
-        support_type = response.strip().lower()
-        
-        if support_type == "direct":
-            confidence = 0.9
-        elif support_type == "indirect":
-            confidence = 0.6
-        else:
-            confidence = 0.2
-        
-        return {"confidence": confidence, "type": support_type}
-
-    def _cosine_similarity(self, vec1, vec2) -> float:
-        """计算Cosine相似度"""
-        
-        import numpy as np
-        
-        vec1 = np.array(vec1)
-        vec2 = np.array(vec2)
-        
-        dot_product = np.dot(vec1, vec2)
-        norm1 = np.linalg.norm(vec1)
-        norm2 = np.linalg.norm(vec2)
-        
-        return dot_product / (norm1 * norm2 + 1e-8)
-
-    def _split_into_sentences(self, text: str) -> List[str]:
-        """切分为句子"""
-        
-        separators = ["。", "！", "？", "；", "\n"]
-        
-        sentences = []
-        current = ""
-        
-        for char in text:
-            current += char
-            if char in separators:
-                if current.strip():
-                    sentences.append(current.strip())
-                current = ""
-        
-        if current.strip():
-            sentences.append(current.strip())
-        
-        return sentences
-
-
-# ================================================================
-# 引用质量评估
-# ================================================================
-
-class CitationQualityEvaluator:
-    """引用质量评估器"""
-    
-    def evaluate(
-        self,
-        citations: List[SentenceCitation]
-    ) -> dict:
-        """评估引用整体质量"""
-        
-        total = len(citations)
-        
-        if total == 0:
-            return {"score": 0, "issues": ["无引用"]}
-        
-        # 统计各类型引用数量
-        direct_count = sum(1 for c in citations if c.support_type == "direct")
-        indirect_count = sum(1 for c in citations if c.support_type == "indirect")
-        none_count = sum(1 for c in citations if c.support_type == "none")
-        
-        # 计算平均置信度
-        avg_confidence = sum(c.confidence for c in citations) / total
-        
-        # 计算质量分数
-        quality_score = (
-            direct_count * 1.0 +
-            indirect_count * 0.5 +
-            none_count * 0.0
-        ) / total
-        
-        # 识别问题
-        issues = []
-        
-        if none_count > 0:
-            issues.append(f"{none_count}个句子无有效引用")
-        
-        if avg_confidence < 0.5:
-            issues.append(f"平均引用置信度过低({avg_confidence:.2f})")
-        
-        return {
-            "score": quality_score,
-            "avg_confidence": avg_confidence,
-            "direct_count": direct_count,
-            "indirect_count": indirect_count,
-            "none_count": none_count,
-            "issues": issues
-        }
+    def track(self, response: str, source_chunks: list[dict]) -> list[dict]:
+        """追踪句子级别引用（V2 实现）。"""
+        raise NotImplementedError("SentenceLevelCitationTracker.track() 将在 V2 实现")
 ```
 
 ### 3.6 时效性问题增强方案（健康监控 + 时效性感知检索）
@@ -2033,616 +1410,377 @@ class CitationQualityEvaluator:
 
 ```python
 # ================================================================
-# 知识库健康度监控系统
+# 实际实现：backend/app/monitor/health_monitor.py → KnowledgeBaseHealthMonitor
+# V1 简化版：无通知服务，无分类权重，无建议生成
 # ================================================================
 
-from dataclasses import dataclass
-from datetime import datetime, timedelta
-from typing import List, Optional
-import asyncio
+"""
+> **与实际代码的对应关系**
 
-@dataclass
-class HealthAlert:
-    """健康度告警"""
-    alert_type: str       # warning / critical
-    document_id: int
-    document_title: str
-    issue_description: str
-    days_until_expiry: Optional[int]
-    created_at: datetime
+实际文件：`backend/app/monitor/health_monitor.py`
+
+V1 简化版（与设计文档中的完整版差异）：
+
+1. run_daily_check() → dict
+   - 不依赖外部 notification_service
+   - 不生成 recommendations
+   - 直接查询 MySQL，无 category 权重（所有文档权重相同）
+
+2. _calculate_health_score() → float
+   - 使用指数衰减模型：freshness = exp(-0.693 × days_since / half_life)
+   - 过期文档：freshness *= 0.1
+   - 无 category_weights，所有文档等权
+
+3. 实际健康度指标：
+   - health_score：0-100 分
+   - warning_count：即将过期文档数
+   - expired_count：已过期文档数
+
+4. 调用方式：
+   - 由 monitor/scheduler.py 定时任务调用
+   - 结果写入 kb_health_log 表
+"""
+
+from __future__ import annotations
+
+import logging
+import math
+from datetime import date
+from typing import Any
+
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from app.core.config import settings
+from app.models import KbDocument, KbHealthLog
+
+logger = logging.getLogger(__name__)
+
 
 class KnowledgeBaseHealthMonitor:
-    """
-    知识库健康度监控器
-    
-    面试要点：
-    - 展示可观测性思维
-    - 展示对知识库质量的持续关注
-    - 展示主动运维能力
-    """
-    
-    # 健康度评估配置
-    HEALTH_CONFIG = {
-        "warning_days": 30,      # 30天内过期 → warning
-        "critical_days": 0,      # 已过期 → critical
-        "freshness_half_life": 180,  # 新鲜度半衰期（天）
-        "min_health_score": 60,  # 最低健康度阈值
-    }
+    """知识库健康度监控器（V1 简化版）。"""
 
-    def __init__(self, db_session, notification_service):
-        self.db = db_session
-        self.notification = notification_service
+    def __init__(self, db: Session) -> None:
+        self.db = db
 
-    async def run_daily_health_check(self) -> dict:
-        """
-        每日健康检查
-        
-        自动化任务，每日凌晨执行
-        """
-        
-        today = datetime.now()
-        
-        # 1. 检查即将过期的文档
-        warning_docs = await self._check_upcoming_expiry(today)
-        
-        # 2. 检查已过期文档
-        expired_docs = await self._check_expired_docs(today)
-        
-        # 3. 计算整体健康度
-        health_score = await self._calculate_health_score(today)
-        
-        # 4. 生成报告
+    def run_daily_check(self) -> dict[str, Any]:
+        """执行一次健康检查，返回报告字典。"""
+        today = date.today()
+
+        # 1. 即将过期文档
+        warning_date = today + __import__("datetime").timedelta(days=settings.kb_warning_days)
+        warning_docs = self._query_docs_in_range(today, warning_date)
+
+        # 2. 已过期文档
+        expired_docs = self._query_expired_docs(today)
+
+        # 3. 健康度评分
+        health_score = self._calculate_health_score(today)
+
         report = {
-            "check_date": today.strftime("%Y-%m-%d"),
+            "check_date": today.isoformat(),
             "health_score": health_score,
             "warning_count": len(warning_docs),
             "expired_count": len(expired_docs),
             "warning_docs": warning_docs,
             "expired_docs": expired_docs,
-            "recommendations": self._generate_recommendations(
-                warning_docs, expired_docs, health_score
-            )
         }
-        
-        # 5. 发送告警
-        await self._send_alerts(warning_docs, expired_docs)
-        
-        # 6. 记录健康度日志
-        await self._log_health_report(report)
-        
+
+        # 4. 写入日志
+        self._log_report(report)
+
+        logger.info(
+            "KB健康检查完成：score=%.2f, warning=%d, expired=%d",
+            health_score,
+            len(warning_docs),
+            len(expired_docs),
+        )
+
         return report
 
-    async def _check_upcoming_expiry(self, today: datetime) -> List[dict]:
-        """检查即将过期的文档"""
-        
-        warning_date = today + timedelta(days=self.HEALTH_CONFIG["warning_days"])
-        
-        # 查询即将过期的文档
-        query = """
-            SELECT id, title, valid_until, category, source
-            FROM kb_document
-            WHERE valid_until BETWEEN :today AND :warning_date
-            AND is_current = 1
-            AND status = 1
-            ORDER BY valid_until ASC
-        """
-        
-        results = await self.db.execute(query, {
-            "today": today,
-            "warning_date": warning_date
-        })
-        
-        warning_docs = []
-        for row in results:
-            days_until_expiry = (row.valid_until - today).days
-            warning_docs.append({
-                "id": row.id,
-                "title": row.title,
-                "valid_until": row.valid_until.strftime("%Y-%m-%d"),
-                "days_until_expiry": days_until_expiry,
-                "category": row.category,
-                "source": row.source
-            })
-        
-        return warning_docs
+    def _query_docs_in_range(self, start: date, end: date) -> list[dict]:
+        """查询在 [start, end] 区间内过期的文档。"""
+        rows = (
+            self.db.query(KbDocument)
+            .filter(
+                KbDocument.status == 1,
+                KbDocument.expire_date.isnot(None),
+                KbDocument.expire_date >= start,
+                KbDocument.expire_date <= end,
+            )
+            .order_by(KbDocument.expire_date.asc())
+            .all()
+        )
+        return [
+            {
+                "id": r.id,
+                "title": r.title,
+                "expire_date": r.expire_date.isoformat(),
+                "days_until_expiry": (r.expire_date - start).days,
+            }
+            for r in rows
+        ]
 
-    async def _check_expired_docs(self, today: datetime) -> List[dict]:
-        """检查已过期文档"""
-        
-        query = """
-            SELECT id, title, valid_until, category, source
-            FROM kb_document
-            WHERE valid_until < :today
-            AND is_current = 1
-            AND status = 1
-            ORDER BY valid_until DESC
-        """
-        
-        results = await self.db.execute(query, {"today": today})
-        
-        expired_docs = []
-        for row in results:
-            expired_docs.append({
-                "id": row.id,
-                "title": row.title,
-                "valid_until": row.valid_until.strftime("%Y-%m-%d"),
-                "days_expired": (today - row.valid_until).days,
-                "category": row.category,
-                "source": row.source
-            })
-        
-        return expired_docs
+    def _query_expired_docs(self, today: date) -> list[dict]:
+        """查询已过期文档。"""
+        rows = (
+            self.db.query(KbDocument)
+            .filter(
+                KbDocument.status == 1,
+                KbDocument.expire_date.isnot(None),
+                KbDocument.expire_date < today,
+            )
+            .order_by(KbDocument.expire_date.desc())
+            .all()
+        )
+        return [
+            {
+                "id": r.id,
+                "title": r.title,
+                "expire_date": r.expire_date.isoformat(),
+                "days_expired": (today - r.expire_date).days,
+            }
+            for r in rows
+        ]
 
-    async def _calculate_health_score(self, today: datetime) -> float:
-        """
-        计算知识库整体健康度
-        
-        健康度 = Σ(文档新鲜度 × 文档权重) / 文档总数
-        
-        新鲜度 = exp(-0.693 × 天数 / 半衰期)
-        """
-        
-        query = """
-            SELECT id, valid_from, valid_until, category
-            FROM kb_document
-            WHERE is_current = 1
-            AND status = 1
-        """
-        
-        results = await self.db.execute(query)
-        
-        if not results:
+    def _calculate_health_score(self, today: date) -> float:
+        """计算知识库整体健康度（0-100）。"""
+        rows = (
+            self.db.query(
+                KbDocument.expire_date,
+                KbDocument.effective_date,
+            )
+            .filter(
+                KbDocument.status == 1,
+                KbDocument.expire_date.isnot(None),
+            )
+            .all()
+        )
+
+        if not rows:
             return 100.0
-        
-        total_score = 0
-        total_weight = 0
-        
-        # 文档权重配置（政策类权重更高）
-        category_weights = {
-            "policy": 2.0,
-            "process": 1.5,
-            "regulation": 2.0,
-            "faq": 1.0,
-        }
-        
-        for row in results:
-            # 计算新鲜度
-            days_since_valid = (today - row.valid_from).days if row.valid_from else 365
-            half_life = self.HEALTH_CONFIG["freshness_half_life"]
-            freshness = math.exp(-0.693 * days_since_valid / half_life)
-            
-            # 过期惩罚
-            if row.valid_until and row.valid_until < today:
-                freshness *= 0.1  # 过期文档大幅降权
-            
-            # 文档权重
-            weight = category_weights.get(row.category, 1.0)
-            
-            total_score += freshness * weight
-            total_weight += weight
-        
-        health_score = (total_score / total_weight) * 100
-        
-        return round(health_score, 2)
 
-    def _generate_recommendations(
-        self,
-        warning_docs: List[dict],
-        expired_docs: List[dict],
-        health_score: float
-    ) -> List[str]:
-        """生成改进建议"""
-        
-        recommendations = []
-        
-        if expired_docs:
-            recommendations.append(
-                f"紧急：{len(expired_docs)}个文档已过期，请立即更新或标记为历史版本"
+        total_score = 0.0
+        total_weight = 0.0
+
+        half_life = settings.kb_freshness_half_life
+
+        for row in rows:
+            effective = row.effective_date or today
+            expire = row.expire_date
+
+            days_since = (today - effective).days
+            freshness = math.exp(-0.693 * days_since / half_life)
+
+            if expire < today:
+                freshness *= 0.1  # 过期惩罚
+
+            total_score += freshness
+            total_weight += 1.0
+
+        score = (total_score / total_weight) * 100 if total_weight > 0 else 100.0
+        return round(score, 2)
+
+    def _log_report(self, report: dict[str, Any]) -> None:
+        """写入健康度日志。"""
+        try:
+            log = KbHealthLog(
+                check_date=date.fromisoformat(report["check_date"]),
+                health_score=report["health_score"],
+                warning_docs=len(report["warning_docs"]),
+                expired_docs=len(report["expired_docs"]),
+                total_docs=self._count_total_docs(),
             )
-        
-        if warning_docs:
-            recommendations.append(
-                f"预警：{len(warning_docs)}个文档将在30天内过期，请提前准备更新"
-            )
-        
-        if health_score < self.HEALTH_CONFIG["min_health_score"]:
-            recommendations.append(
-                f"健康度过低({health_score})，建议批量更新知识库内容"
-            )
-        
-        if not recommendations:
-            recommendations.append("知识库状态良好，继续保持定期更新")
-        
-        return recommendations
+            self.db.add(log)
+            self.db.commit()
+        except Exception as e:
+            logger.warning("写入 kb_health_log 失败: %s", str(e))
+            self.db.rollback()
 
-    async def _send_alerts(
-        self,
-        warning_docs: List[dict],
-        expired_docs: List[dict]
-    ):
-        """发送告警通知"""
-        
-        # 发送过期告警（critical）
-        for doc in expired_docs:
-            await self.notification.send_alert(
-                level="critical",
-                title=f"文档已过期：{doc['title']}",
-                content=f"""
-文档《{doc['title']}》已于{doc['valid_until']}过期，已过期{doc['days_expired']}天。
-
-文档信息：
-- 分类：{doc['category']}
-- 来源：{doc['source']}
-
-建议操作：
-1. 获取最新版本文档并上传
-2. 或将当前文档标记为"历史版本"
-3. 更新相关引用的时效性标记
-""",
-                recipients=["admin", "knowledge_manager"]
-            )
-        
-        # 发送预警（warning）
-        for doc in warning_docs:
-            await self.notification.send_alert(
-                level="warning",
-                title=f"文档即将过期：{doc['title']}",
-                content=f"""
-文档《{doc['title']}》将在{doc['days_until_expiry']}天后过期。
-
-过期日期：{doc['valid_until']}
-分类：{doc['category']}
-来源：{doc['source']}
-
-建议提前准备更新。
-""",
-                recipients=["admin", "knowledge_manager"]
-            )
-
-    async def _log_health_report(self, report: dict):
-        """记录健康度日志"""
-        
-        await self.db.execute("""
-            INSERT INTO kb_health_log (
-                check_date, total_docs, current_docs,
-                warning_docs, expired_docs, avg_freshness, health_score
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, [
-            report["check_date"],
-            report.get("total_docs", 0),
-            report.get("current_docs", 0),
-            report["warning_count"],
-            report["expired_count"],
-            report.get("avg_freshness", 0),
-            report["health_score"]
-        ])
-
-
-# ================================================================
-# 定时任务配置
-# ================================================================
-
-async def setup_health_monitoring():
-    """配置健康度监控定时任务"""
-    
-    monitor = KnowledgeBaseHealthMonitor(db, notification)
-    
-    # 每日凌晨2点执行健康检查
-    scheduler.add_job(
-        monitor.run_daily_health_check,
-        trigger="cron",
-        hour=2,
-        minute=0,
-        id="kb_health_check",
-        replace_existing=True
-    )
-    
-    # 每周一上午9点发送健康度周报
-    scheduler.add_job(
-        monitor.send_weekly_report,
-        trigger="cron",
-        day_of_week="mon",
-        hour=9,
-        minute=0,
-        id="kb_weekly_report",
-        replace_existing=True
-    )
+    def _count_total_docs(self) -> int:
+        """统计当前有效文档总数。"""
+        return (
+            self.db.query(KbDocument)
+            .filter(KbDocument.status == 1)
+            .count()
+        )
 ```
+
+> **与设计文档 v2.0 的差异**：
+> - v2.0 设计为"知识库版本管理 + 实时数据通道"，实际简化为"时效性调整 + 健康监控"
+> - 无 `kb_version` 表和实时 API 通道
+> - 时效性信息存储在 ChromaDB metadata 和 `qa_message` JSON 字段中
+
+> **与实际代码的对应关系**：`backend/app/monitor/health_monitor.py` 中的 `KnowledgeBaseHealthMonitor` 是 V1 简化版，直接操作 SQLAlchemy Session，无外部通知服务。健康度计算公式与设计文档一致（指数衰减 + 过期惩罚），但未使用文档分类权重。
 
 #### 时效性感知的检索
 
 ```python
 # ================================================================
-# 时效性感知的检索器
+# 实际实现：backend/app/agent/temporal_retriever.py
+# V1 简化版：过期文档过滤 + 降权标记
+# V2 预留接口：TemporalAwareRetriever（暂未实现）
 # ================================================================
 
-import math
-from datetime import datetime, timedelta
-from typing import List, Optional
+"""
+> **与实际代码的对应关系**
 
-@dataclass
-class TemporalSearchResult:
-    """带时效性信息的检索结果"""
-    chunk_id: str
-    text: str
-    score: float              # 原始相似度得分
-    temporal_score: float     # 时效性得分
-    combined_score: float     # 综合得分
-    valid_from: Optional[datetime]
-    valid_until: Optional[datetime]
-    days_until_expiry: Optional[int]
-    is_expired: bool
-    freshness_level: str      # fresh / aging / expired
+实际文件：`backend/app/agent/temporal_retriever.py`
+
+V1 实现三个函数（简化版）：
+
+1. filter_expired_docs(db, doc_ids) → set[int]
+   - 查询 MySQL，返回已过期文档 ID 集合
+   - 仅检查 KbDocument.expire_date < today
+
+2. get_expiring_soon_docs(db, warning_days) → list[dict]
+   - 供监控模块调用
+   - 返回即将过期文档列表（含 days_until_expiry）
+
+3. apply_temporal_adjustment(hits, expired_ids) → list[dict]
+   - V1 仅添加 is_expired 标记，不修改得分
+   - V2 再扩展为综合得分排序
+
+V2 预留接口：
+- TemporalAwareRetriever.retrieve() → raise NotImplementedError
+  - 设计意图：综合得分 = similarity × 0.7 + temporal × 0.3
+  - 过期文档降权 × 0.1
+  - 按综合得分排序取 top_k
+"""
+
+from __future__ import annotations
+
+import logging
+from datetime import date, datetime
+from typing import Any
+
+from sqlalchemy.orm import Session
+
+from app.core.config import settings
+from app.models import KbDocument
+
+logger = logging.getLogger(__name__)
+
+
+# ===== V1：过期文档过滤 =====
+
+
+def filter_expired_docs(db: Session, doc_ids: list[int]) -> set[int]:
+    """过滤已过期文档 ID（V1 简化版）。
+
+    仅检查 `KbDocument.expire_date`，已过期且未设为长期有效的文档会被过滤。
+
+    Args:
+        db: 数据库会话
+        doc_ids: 候选文档 ID 列表
+
+    Returns:
+        已过期文档 ID 集合
+    """
+    if not doc_ids:
+        return set()
+
+    today = date.today()
+    expired_rows = (
+        db.query(KbDocument.id)
+        .filter(
+            KbDocument.id.in_(doc_ids),
+            KbDocument.status == 1,
+            KbDocument.expire_date.isnot(None),
+            KbDocument.expire_date < today,
+        )
+        .all()
+    )
+    return {row.id for row in expired_rows}
+
+
+def get_expiring_soon_docs(db: Session, warning_days: int = 30) -> list[dict]:
+    """获取即将过期文档（V1 简化版，供监控模块调用）。
+
+    Args:
+        db: 数据库会话
+        warning_days: 预警天数（默认 30 天）
+
+    Returns:
+        即将过期文档列表
+    """
+    today = date.today()
+    warning_date = today + __import__("datetime").timedelta(days=warning_days)
+
+    rows = (
+        db.query(KbDocument)
+        .filter(
+            KbDocument.status == 1,
+            KbDocument.expire_date.isnot(None),
+            KbDocument.expire_date >= today,
+            KbDocument.expire_date <= warning_date,
+        )
+        .order_by(KbDocument.expire_date.asc())
+        .all()
+    )
+
+    return [
+        {
+            "id": row.id,
+            "title": row.title,
+            "expire_date": row.expire_date.isoformat() if row.expire_date else None,
+            "days_until_expiry": (row.expire_date - today).days if row.expire_date else None,
+        }
+        for row in rows
+    ]
+
+
+# ===== V1：检索结果降权标记 =====
+
+
+def apply_temporal_adjustment(hits: list[dict], expired_ids: set[int]) -> list[dict]:
+    """对检索结果应用时效性调整（V1 简化：仅标记过期）。
+
+    V1 不修改得分，仅对过期文档添加 `is_expired` 标记，
+    由上层节点决定是否降权或展示警告。
+
+    Args:
+        hits: 检索结果列表
+        expired_ids: 已过期文档 ID 集合
+
+    Returns:
+        调整后的检索结果列表
+    """
+    adjusted = []
+    for h in hits:
+        doc_id = (h.get("metadata") or {}).get("document_id")
+        h_copy = dict(h)
+        h_copy["is_expired"] = doc_id in expired_ids if doc_id is not None else False
+        adjusted.append(h_copy)
+    return adjusted
+
+
+# ===== V2 预留接口（完整时效感知检索）=====
+
 
 class TemporalAwareRetriever:
-    """
-    时效性感知的检索器
-    
-    核心思想：
-    - 检索时考虑文档的时效性
-    - 新文档权重更高
-    - 过期文档降低权重或排除
-    
-    面试要点：
-    - 展示对知识时效性的重视
-    - 展示算法优化能力（不只是相似度，还要考虑时间维度）
-    """
-    
-    # 时效性权重配置
-    TEMPORAL_CONFIG = {
-        # 时间衰减配置
-        "half_life_days": 180,       # 180天后权重减半
-        "grace_period_days": 30,     # 过期30天内仍可用但降权
-        
-        # 权重配置
-        "similarity_weight": 0.7,    # 相似度权重
-        "temporal_weight": 0.3,      # 时效性权重
-        
-        # 分类特定配置
-        "policy_decay_factor": 0.5,  # 政策类文档衰减更快
-        "faq_decay_factor": 0.8,     # FAQ类文档衰减较慢
-        
-        # 过期处理策略
-        "expired_penalty": 0.1,      # 过期文档惩罚系数
-        "exclude_expired": False,    # 是否完全排除过期文档
-    }
+    """时效感知检索器（V2 实现，V1 仅预留接口）。
 
-    def __init__(self, base_retriever, config: dict = None):
+    V2 实现要点：
+    1. 基础向量检索（取 top_k × 2 候选）
+    2. 计算时效性得分（指数衰减：exp(-0.693 × days / half_life)）
+    3. 综合得分 = 相似度 × 0.7 + 时效性 × 0.3
+    4. 过期文档降权 × 0.1
+    5. 按综合得分排序取 top_k
+    """
+
+    def __init__(self, base_retriever: Any, config: dict | None = None) -> None:
         self.base_retriever = base_retriever
-        self.config = config or self.TEMPORAL_CONFIG
+        self.config = config or {
+            "half_life_days": settings.kb_freshness_half_life,
+            "similarity_weight": 0.7,
+            "temporal_weight": 0.3,
+            "expired_penalty": 0.1,
+        }
 
-    async def retrieve(
-        self,
-        query: str,
-        top_k: int = 10,
-        exclude_expired: bool = None
-    ) -> List[TemporalSearchResult]:
-        """
-        时效性感知检索
-        
-        流程：
-        1. 基础检索（获取候选集）
-        2. 计算时效性得分
-        3. 计算综合得分
-        4. 过滤/降权过期内容
-        5. 返回排序后的结果
-        """
-        
-        # 1. 基础检索（多取一些候选）
-        base_results = await self.base_retriever.retrieve(
-            query,
-            top_k=top_k * 2
-        )
-        
-        # 2. 计算时效性得分
-        temporal_results = []
-        today = datetime.now()
-        
-        for result in base_results:
-            temporal_score = self._calculate_temporal_score(
-                result.metadata,
-                today
-            )
-            
-            combined_score = (
-                result.score * self.config["similarity_weight"] +
-                temporal_score * self.config["temporal_weight"]
-            )
-            
-            # 判断过期状态
-            valid_until = result.metadata.get("valid_until")
-            is_expired = valid_until and valid_until < today
-            
-            days_until_expiry = None
-            if valid_until:
-                days_until_expiry = (valid_until - today).days
-            
-            # 判断新鲜度级别
-            freshness_level = self._classify_freshness(
-                days_until_expiry,
-                is_expired
-            )
-            
-            temporal_results.append(TemporalSearchResult(
-                chunk_id=result.chunk_id,
-                text=result.text,
-                score=result.score,
-                temporal_score=temporal_score,
-                combined_score=combined_score,
-                valid_from=result.metadata.get("valid_from"),
-                valid_until=valid_until,
-                days_until_expiry=days_until_expiry,
-                is_expired=is_expired,
-                freshness_level=freshness_level
-            ))
-        
-        # 3. 过滤过期文档（可选）
-        if exclude_expired or self.config["exclude_expired"]:
-            temporal_results = [
-                r for r in temporal_results if not r.is_expired
-            ]
-        else:
-            # 过期文档降权
-            for r in temporal_results:
-                if r.is_expired:
-                    r.combined_score *= self.config["expired_penalty"]
-        
-        # 4. 按综合得分排序
-        temporal_results.sort(
-            key=lambda x: x.combined_score,
-            reverse=True
-        )
-        
-        return temporal_results[:top_k]
-
-    def _calculate_temporal_score(
-        self,
-        metadata: dict,
-        today: datetime
-    ) -> float:
-        """
-        计算时效性得分
-        
-        新鲜度 = exp(-0.693 × 天数 / 半衰期)
-        
-        考虑因素：
-        1. 文档生效时间（越新越好）
-        2. 文档过期时间（即将过期降权）
-        3. 文档分类（政策类衰减更快）
-        """
-        
-        valid_from = metadata.get("valid_from")
-        valid_until = metadata.get("valid_until")
-        category = metadata.get("category", "faq")
-        
-        # 计算新鲜度
-        if valid_from:
-            days_since_valid = (today - valid_from).days
-        else:
-            days_since_valid = 0  # 不知道时间，默认新鲜
-        
-        half_life = self.config["half_life_days"]
-        
-        # 分类特定衰减
-        decay_factor = self.config.get(
-            f"{category}_decay_factor",
-            1.0
-        )
-        
-        adjusted_half_life = half_life * decay_factor
-        
-        freshness = math.exp(-0.693 * days_since_valid / adjusted_half_life)
-        
-        # 过期惩罚
-        if valid_until and valid_until < today:
-            # 已过期
-            days_expired = (today - valid_until).days
-            
-            # 过期越久，惩罚越重
-            if days_expired <= self.config["grace_period_days"]:
-                # 宽限期：轻微惩罚
-                freshness *= 0.5
-            else:
-                # 超过宽限期：大幅惩罚
-                freshness *= self.config["expired_penalty"]
-        
-        elif valid_until:
-            # 未过期但即将过期
-            days_until_expiry = (valid_until - today).days
-            
-            if days_until_expiry <= self.config["grace_period_days"]:
-                # 即将过期：轻微降权
-                freshness *= 0.8
-        
-        return freshness
-
-    def _classify_freshness(
-        self,
-        days_until_expiry: Optional[int],
-        is_expired: bool
-    ) -> str:
-        """分类新鲜度级别"""
-        
-        if is_expired:
-            return "expired"
-        
-        if days_until_expiry is None:
-            return "unknown"
-        
-        if days_until_expiry > 90:
-            return "fresh"
-        elif days_until_expiry > 30:
-            return "aging"
-        else:
-            return "expiring_soon"
-
-
-# ================================================================
-# 时效性提示生成
-# ================================================================
-
-class TemporalHintGenerator:
-    """时效性提示生成器"""
-    
-    def generate_hint(
-        self,
-        results: List[TemporalSearchResult],
-        query: str
-    ) -> str:
-        """为回答生成时效性提示"""
-        
-        # 检查是否有过期或即将过期的内容
-        expired = [r for r in results if r.is_expired]
-        expiring_soon = [r for r in results if r.freshness_level == "expiring_soon"]
-        
-        if not expired and not expiring_soon:
-            return ""
-        
-        hints = []
-        
-        if expired:
-            hints.append(f"""
-⚠️ 重要提示：以下信息包含已过期的内容
-
-本次回答参考了以下已过期的文档：
-{self._format_expired_docs(expired)}
-
-这些政策可能已有更新，请务必：
-1. 登录相关政府部门官网核实最新政策
-2. 拨打官方咨询热线确认
-3. 联系学校就业中心老师获取准确信息
-""")
-        
-        if expiring_soon:
-            hints.append(f"""
-⏰ 时效性提醒：以下信息即将过期
-
-本次回答参考了以下即将过期的文档（30天内）：
-{self._format_expiring_docs(expiring_soon)}
-
-建议您及时核实最新政策，避免信息滞后。
-""")
-        
-        return "\n".join(hints)
-
-    def _format_expired_docs(self, docs: List[TemporalSearchResult]) -> str:
-        """格式化过期文档列表"""
-        
-        lines = []
-        for doc in docs[:3]:  # 只显示前3个
-            lines.append(f"- {doc.text[:50]}...（已过期）")
-        
-        return "\n".join(lines)
-
-    def _format_expiring_docs(self, docs: List[TemporalSearchResult]) -> str:
-        """格式化即将过期文档列表"""
-        
-        lines = []
-        for doc in docs[:3]:
-            days = doc.days_until_expiry or 0
-            lines.append(f"- {doc.text[:50]}...（{days}天后过期）")
-        
-        return "\n".join(lines)
+    def retrieve(self, query: str, top_k: int = 5) -> list[dict]:
+        """时效感知检索（V2 实现）。"""
+        raise NotImplementedError("TemporalAwareRetriever.retrieve() 将在 V2 实现")
 ```
 
 ---
@@ -2660,64 +1798,34 @@ class TemporalHintGenerator:
 │                                                                          │
 │  def agent_loop(user_input):                                            │
 │      while True:                                                         │
-│          # 1. 判断下一步                                                 │
 │          next_step = decide_next_step(user_input, history)              │
-│                                                                          │
-│          if next_step == "search":                                       │
-│              result = search_tool(user_input)                           │
-│          elif next_step == "ask_llm":                                    │
-│              result = llm.generate(user_input, context)                 │
-│          elif next_step == "end":                                        │
-│              return final_answer                                         │
-│                                                                          │
-│          history.append(result)                                         │
-│                                                                          │
+│          ...                                                             │
 │  问题：                                                                   │
 │  ❌ 状态分散在全局变量                                                   │
 │  ❌ 难以追踪执行链路                                                     │
 │  ❌ 循环/分支逻辑复杂                                                   │
 │  ❌ 无法暂停/恢复                                                       │
 │  ❌ 调试困难                                                             │
-│                                                                          │
 └─────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                         LangGraph 实现                                   │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                          │
-│  from langgraph.graph import StateGraph, END                            │
+│  from langgraph.graph import StateGraph, END, START                     │
 │                                                                          │
-│  # 1. 定义状态                                                          │
 │  class AgentState(TypedDict):                                            │
-│      messages: list[BaseMessage]                                        │
+│      messages: Annotated[list, add_messages]                            │
 │      current_query: str                                                  │
-│      tools_used: list[str]                                              │
+│      search_results: list[dict]                                          │
 │      confidence: float                                                   │
-│      response: str                                                      │
+│      ...                                                                 │
 │                                                                          │
-│  # 2. 定义节点                                                          │
-│  def router(state) -> str:                                              │
-│      return "search" if needs_tool(state) else "respond"                │
-│                                                                          │
-│  def search_node(state) -> dict:                                         │
-│      result = search_tool(state["current_query"])                        │
-│      return {"messages": [result], "confidence": result.score}          │
-│                                                                          │
-│  def respond_node(state) -> dict:                                        │
-│      return {"response": llm.generate(state)}                            │
-│                                                                          │
-│  # 3. 构建图                                                            │
 │  graph = StateGraph(AgentState)                                          │
-│  graph.add_node("router", router)                                        │
-│  graph.add_node("search", search_node)                                   │
-│  graph.add_node("respond", respond_node)                                 │
-│  graph.add_edge("router", "search", label="needs_tool")                 │
-│  graph.add_edge("router", "respond", label="direct")                    │
-│  graph.add_edge("search", "respond")                                     │
-│                                                                          │
-│  # 4. 编译 + 执行                                                        │
-│  app = graph.compile()                                                   │
-│  result = app.invoke({"query": user_input})                             │
+│  graph.add_node("route", route_query)                                    │
+│  graph.add_node("search", search_knowledge)                              │
+│  graph.add_edge(START, "route")                                          │
+│  app = graph.compile(checkpointer=sqlite_checkpoint)                    │
 │                                                                          │
 │  优势：                                                                   │
 │  ✅ 状态显式管理                                                          │
@@ -2726,453 +1834,339 @@ class TemporalHintGenerator:
 │  ✅ 支持 Checkpoint (暂停/恢复)                                          │
 │  ✅ 内置可视化调试                                                        │
 │  ✅ 易于扩展                                                              │
-│                                                                          │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 4.2 LangGraph 工作流详解
+> **技术选型变更说明**：本项目中检索层实际采用 **ChromaDB + 自定义向量检索 + 时效性调整**，而非设计文档最初规划的 LlamaIndex + BM25 + Cohere Rerank。原因是：
+> 1. 项目已在使用 ChromaDB 作为向量库，复用现有基础设施减少依赖
+> 2. 就业政策问答场景对检索精度要求较高，但数据量适中，ChromaDB 足够支撑
+> 3. 减少外部依赖（Cohere API、Elasticsearch），降低运维复杂度
+> 4. 语义缓存（Redis）已覆盖部分性能优化需求
+> 5. 时效性调整直接在 ChromaDB 检索结果上叠加时间衰减权重，无需额外检索框架
+
+### 4.2 实际 LangGraph 工作流（v3.0 实装版）
 
 ```python
 # ================================================================
-# LangGraph Agent 完整实现
+# 实际实现：backend/app/agent/state.py → AgentState
+# 实际实现：backend/app/agent/nodes.py → 11 个独立节点函数
 # ================================================================
 
-from typing import Annotated, TypedDict
-from langgraph.graph import StateGraph, END, START
-from langgraph.graph.message import add_messages
-from langgraph.checkpoint.memory import MemorySaver
-from pydantic import BaseModel, Field
-import json
+"""
+> **与实际代码的对应关系**
 
-# ================================================================
-# 1. Agent 状态定义
-# ================================================================
+实际文件：
+- `backend/app/agent/state.py` → AgentState 类
+- `backend/app/agent/nodes.py` → 11 个独立节点函数（非类方法）
+- `backend/app/agent/graph.py` → AgentGraph 类（StateGraph 构建器）
 
-class AgentState(TypedDict):
-    """Agent 状态定义"""
+关键设计差异：
+- 实际 AgentState 使用 `Annotated[dict, "AgentState"]` 而非 TypedDict
+- 实际节点为独立函数（如 route_query(state: dict) → dict），非类方法
+- 所有节点通过 graph.py 注册到 StateGraph
+"""
 
-    # 对话历史
-    messages: Annotated[list, add_messages]
+# ===== AgentState（实际 state.py）=====
 
-    # 当前用户查询
-    current_query: str
+from __future__ import annotations
 
-    # 检索结果
-    search_results: list[dict]
+from typing import Annotated, Optional
 
-    # 引文信息
-    citations: list[dict]
+from langgraph.graph import add_messages
 
-    # 置信度
-    confidence: float
 
-    # 已使用的工具
-    tools_used: list[str]
+class AgentState(Annotated[dict, "AgentState"]):
+    """LangGraph Agent 工作流状态。
 
-    # 工具执行结果
-    tool_outputs: dict
+    使用 TypedDict 模式，支持 IDE 类型检查和 LangGraph 状态管理。
+    所有字段都是可选的，节点按需读写。
+    """
 
-    # 最终回答
-    response: str
+    # ===== 核心对话 =====
+    messages: Annotated[list[dict], add_messages]  # 对话历史（Annotated + add_messages 自动追加）
+    current_query: str  # 当前用户查询
+    conversation_id: int  # 业务会话 ID
+    user_id: int  # 当前用户 ID
 
-    # 执行路由
-    route: str
+    # ===== 检索结果 =====
+    search_results: list[dict]  # 检索结果
+    citations: list[dict]  # 引用信息
+    confidence: float  # 综合置信度 (0-1)
+    query_risk_level: str  # high / medium / low
 
-    # 是否应该拒答
+    # ===== 路由决策 =====
+    route: str  # search / direct / refuse / generate
     should_refuse: bool
-
-    # 拒答原因
     refusal_reason: str
 
-    # 版本信息（时效性）
-    version_info: dict
+    # ===== 五重防护结果 =====
+    consistency_issues: list[dict]
+    fact_issues: list[dict]
+    temporal_warnings: list[str]
+
+    # ===== 最终回答 =====
+    response: str
+    is_low_confidence: bool  # 低置信度降级回答
+    content_safe: bool  # 内容审核是否通过
+
+    # ===== 会话记忆（V1 简化）=====
+    history: list[dict]  # 历史对话摘要（最近 N 轮）
+
+    # ===== 可解释性（V1 简化：只记核心字段）=====
+    reasoning_chain: list[dict]  # 每步决策记录
+
+    # ===== 错误处理 =====
+    error: dict
+    is_error: bool
+
+    # ===== 死循环防护 =====
+    retry_attempt: int  # 置信度重试次数（防条件判断循环）
+    tool_call_count: int  # 工具调用总次数（防工具选择循环）
+    last_search_query: str  # 上次检索关键词（语义去重）
+    regenerate_count: int  # 重生成次数（防结果验证循环）
+    forced_exit: bool  # 是否强制退出循环
+    skipped_consistency_check: bool  # 是否跳过一致性检查（降级）
+
+    # ===== 业务关联 =====
+    request_id: str  # 请求 ID（幂等键）
+    llm_tokens_in: int  # Prompt Token 数
+    llm_tokens_out: int  # 生成 Token 数
+    created_at: str  # 请求时间
+
+
+# ===== 11 个节点函数（实际 nodes.py）=====
+
+"""
+节点函数列表（backend/app/agent/nodes.py）：
+
+1. route_query(state) → dict
+   - 路由决策：search / direct / refuse
+   - 防工具选择循环：tool_call_count >= 3 时强制生成
+
+2. search_knowledge(state) → dict
+   - 时效感知检索：knowledge_search() + filter_expired_docs() + apply_temporal_adjustment()
+   - 防重复检索：相同查询跳过
+
+3. check_confidence(state) → dict
+   - 动态置信度判断：accept / regenerate / refuse
+   - 防条件判断循环：每次重试降低阈值
+
+4. generate_response(state) → dict
+   - 带引用生成回答
+   - 使用 chat_with_usage() 追踪 token 消耗
+
+5. regenerate_with_hints(state) → dict
+   - 带修正提示的重新生成
+   - 只对 high 严重度问题注入修正信息
+
+6. check_consistency(state) → dict
+   - 自我一致性检查（V1 简化）
+   - 验证器降级：非阻塞
+
+7. verify_facts(state) → dict
+   - 事实核验：正则验证政策编号、日期、金额
+
+8. content_moderation(state) → dict
+   - 内容审核：敏感词过滤（V1 简化，不调 LLM）
+
+9. accept_with_warning(state) → dict
+   - 接受回答但附加警告
+
+10. generate_refusal(state) → dict
+    - 生成拒答回复（V1 简化：直接返回模板，不调 LLM）
+
+11. direct_response(state) → dict
+    - 简单问候的直接回复（不走检索）
+
+12. error_handler(state) → dict
+    - 统一错误处理：记录错误，返回友好提示
+"""
 
 
 # ================================================================
-# 2. 节点定义
+# AgentGraph（实际 graph.py）
 # ================================================================
 
-class AgentNodes:
-    """Agent 节点集合"""
+from langgraph.graph import StateGraph, END, START
+from app.agent.sqlite_checkpoint import SqliteSaver
+from app.agent.nodes import (
+    accept_with_warning,
+    check_confidence,
+    check_consistency,
+    content_moderation,
+    direct_response,
+    error_handler,
+    generate_refusal,
+    generate_response,
+    regenerate_with_hints,
+    route_query,
+    search_knowledge,
+    verify_facts,
+)
+from app.agent.state import AgentState
 
-    def __init__(self, llm, tools, retriever):
-        self.llm = llm
-        self.tools = tools
-        self.retriever = retriever
 
-    # -------------------- 路由节点 --------------------
+class AgentGraph:
+    """LangGraph Agent 工作流构建器。"""
 
-    def route_query(self, state: AgentState) -> AgentState:
-        """
-        路由节点：判断查询类型，决定下一步
+    def __init__(self) -> None:
+        self.graph: StateGraph | None = None
 
-        返回路由结果：
-        - "search": 需要检索
-        - "tool_call": 需要调用工具
-        - "direct": 直接回答
-        - "refuse": 拒答
-        """
+    def build(self) -> StateGraph:
+        """构建工作流图（节点 + 边）。"""
+        graph = StateGraph(AgentState)
 
-        query = state["current_query"]
-        messages = state["messages"]
+        # ===== 注册节点 =====
+        graph.add_node("route", route_query)
+        graph.add_node("search", search_knowledge)
+        graph.add_node("check_confidence", check_confidence)
+        graph.add_node("generate", generate_response)
+        graph.add_node("regenerate", regenerate_with_hints)
+        graph.add_node("check_consistency", check_consistency)
+        graph.add_node("verify_facts", verify_facts)
+        graph.add_node("content_moderation", content_moderation)
+        graph.add_node("accept_with_warning", accept_with_warning)
+        graph.add_node("refuse", generate_refusal)
+        graph.add_node("error_handler", error_handler)
+        graph.add_node("direct_response", direct_response)
 
-        # 构建路由 Prompt
-        router_prompt = f"""
-你是查询路由专家。根据用户问题，决定下一步操作。
+        # ===== 定义边 =====
+        graph.add_edge(START, "route")
 
-当前问题：{query}
-
-选项：
-1. search: 需要检索知识库才能回答
-2. tool_call: 需要调用外部工具（如查档案、预约等）
-3. direct: 可以直接从对话历史回答，不需要额外操作
-4. refuse: 问题超出服务范围或无法回答
-
-判断依据：
-- 如果问题涉及政策、流程、规定 → search
-- 如果问题涉及个人数据查询、预约、生成 → tool_call
-- 如果是简单寒暄或跟进 → direct
-- 如果涉及违法、政治敏感、无法核实的内容 → refuse
-
-只输出一个选项：search/tool_call/direct/refuse
-"""
-
-        # 调用 LLM 路由
-        response = self.llm.chat([{"role": "user", "content": router_prompt}])
-
-        route = response.strip().lower()
-
-        # 验证路由结果
-        valid_routes = ["search", "tool_call", "direct", "refuse"]
-        if route not in valid_routes:
-            route = "search"  # 默认走检索
-
-        return {"route": route}
-
-    # -------------------- 检索节点 --------------------
-
-    def search_knowledge(self, state: AgentState) -> AgentState:
-        """
-        检索节点：使用 LlamaIndex 检索知识库
-        """
-
-        query = state["current_query"]
-
-        # 使用 LlamaIndex 检索
-        search_result = self.retriever.query_with_citations(query)
-
-        return {
-            "search_results": search_result["results"],
-            "citations": search_result["citations"],
-            "confidence": search_result["confidence"]
-        }
-
-    # -------------------- 置信度检查节点 --------------------
-
-    def check_confidence(self, state: AgentState) -> AgentState:
-        """
-        置信度检查：判断检索结果是否足够可靠
-        """
-
-        confidence = state["confidence"]
-        search_results = state["search_results"]
-
-        # 拒答条件
-        should_refuse = False
-        refusal_reason = None
-
-        if not search_results:
-            should_refuse = True
-            refusal_reason = "知识库中没有相关内容"
-        elif confidence < 0.5:
-            should_refuse = True
-            refusal_reason = "检索结果置信度过低"
-        elif len(search_results) == 0:
-            should_refuse = True
-            refusal_reason = "未找到匹配的知识"
-
-        return {
-            "should_refuse": should_refuse,
-            "refusal_reason": refusal_reason
-        }
-
-    # -------------------- 拒答节点 --------------------
-
-    def generate_refusal(self, state: AgentState) -> AgentState:
-        """
-        拒答节点：生成友好的拒答内容
-        """
-
-        refusal_reason = state.get("refusal_reason", "无法回答此问题")
-
-        refusal_response = f"""
-抱歉，关于您的问题，我无法提供准确回答。
-
-原因：{refusal_reason}
-
-建议您：
-1. 联系学校就业中心老师获取准确信息
-2. 登录相关政府部门官网查询最新政策
-3. 拨打官方咨询热线
-
-如果您有其他就业相关问题，我很乐意帮助您。
-"""
-
-        return {"response": refusal_response}
-
-    # -------------------- 工具调用节点 --------------------
-
-    def execute_tool(self, state: AgentState) -> AgentState:
-        """
-        工具执行节点：调用相应的工具
-        """
-
-        # 解析需要调用的工具
-        # 这里需要从 messages 中提取工具调用信息
-
-        tool_outputs = {}
-        for tool_name, tool_args in state.get("pending_tool_calls", []).items():
-            tool_func = self.tools.get(tool_name)
-            if tool_func:
-                result = tool_func(**tool_args)
-                tool_outputs[tool_name] = result
-
-        return {"tool_outputs": tool_outputs}
-
-    # -------------------- 生成回答节点 --------------------
-
-    def generate_response(self, state: AgentState) -> AgentState:
-        """
-        生成回答节点：结合检索结果生成最终回答
-        """
-
-        query = state["current_query"]
-        search_results = state["search_results"]
-        citations = state["citations"]
-        confidence = state["confidence"]
-        tool_outputs = state.get("tool_outputs", {})
-
-        # 构建生成 Prompt
-        context = self._build_context(search_results, tool_outputs)
-
-        generation_prompt = f"""
-你是高校就业服务平台的 AI 助手。请基于以下参考资料回答问题。
-
-参考资料：
-{context}
-
-回答要求：
-1. 每说一个事实，必须在句尾标注来源 [来源: XXX]
-2. 如果某些信息参考资料中没有，直接说"这个我不确定"
-3. 不要编造政策编号、日期、数字
-4. 如果参考资料较少，表达要更保守
-5. 语气友好，给出具体建议
-
-当前问题：{query}
-"""
-
-        response = self.llm.chat([
-            {"role": "system", "content": generation_prompt}
-        ])
-
-        # 添加引用格式化
-        formatted_response = self._format_with_citations(
-            response,
-            citations
+        # route 分支
+        graph.add_conditional_edges(
+            "route",
+            _route_decision,
+            {
+                "search": "search",
+                "direct": "direct_response",
+                "refuse": "refuse",
+            },
         )
 
-        return {"response": formatted_response}
+        # search → check_confidence
+        graph.add_edge("search", "check_confidence")
 
-    def _build_context(self, search_results: list, tool_outputs: dict) -> str:
-        """构建上下文"""
+        # check_confidence 三分支
+        graph.add_conditional_edges(
+            "check_confidence",
+            _confidence_decision,
+            {
+                "accept": "generate",
+                "regenerate": "regenerate",
+                "refuse": "refuse",
+            },
+        )
 
-        context_parts = []
+        # regenerate → generate
+        graph.add_edge("regenerate", "generate")
 
-        # 添加检索结果
-        for i, result in enumerate(search_results[:5], 1):
-            context_parts.append(
-                f"[{i}] {result['content']}\n来源: {result.get('source', '未知')}"
-            )
+        # generate → check_consistency → verify_facts → content_moderation
+        graph.add_edge("generate", "check_consistency")
+        graph.add_edge("check_consistency", "verify_facts")
+        graph.add_edge("verify_facts", "content_moderation")
 
-        #添加工具输出
-        for tool_name, output in tool_outputs.items():
-            context_parts.append(f"[工具: {tool_name}]\n{output}")
+        # content_moderation → 最终决策
+        graph.add_conditional_edges(
+            "content_moderation",
+            _post_moderation_decision,
+            {
+                "accept": END,
+                "accept_with_warning": "accept_with_warning",
+                "refuse": "refuse",
+            },
+        )
 
-        return "\n\n".join(context_parts)
+        # accept_with_warning → error_handler → END
+        graph.add_edge("accept_with_warning", "error_handler")
+        graph.add_edge("refuse", "error_handler")
+        graph.add_edge("error_handler", END)
+        graph.add_edge("direct_response", END)
 
-    def _format_with_citations(self, response: str, citations: list) -> str:
-        """格式化带引用的回答"""
-        # 添加引用列表
-        if citations:
-            citation_section = "\n\n---\n**参考来源：**\n"
-            for i, cite in enumerate(citations, 1):
-                citation_section += f"{i}. {cite['doc_title']} - {cite.get('page', 'N/A')}页\n"
+        self.graph = graph
+        return graph
 
-            response += citation_section
+    def compile(self, db_path: str = "data/agent_checkpoints.db") -> Any:
+        """编译工作流，配置 Checkpoint。"""
+        graph = self.build()
+        checkpointer = SqliteSaver(db_path=db_path)
 
-        return response
-
-
-# ================================================================
-# 3. 边定义
-# ================================================================
-
-def should_search(state: AgentState) -> str:
-    """条件边：是否需要检索"""
-
-    route = state.get("route", "search")
-
-    if route == "search":
-        return "do_search"
-    elif route == "tool_call":
-        return "do_tool"
-    elif route == "direct":
-        return "do_direct"
-    elif route == "refuse":
-        return "do_refuse"
-
-    return "do_search"
+        compiled = graph.compile(checkpointer)
+        return compiled
 
 
-def should_retry(state: AgentState) -> str:
-    """条件边：是否需要重试"""
+# ==================== 条件决策函数 ====================
 
+
+def _route_decision(state: dict) -> str:
+    """路由决策：根据 route 字段选择下一步。"""
+    return state.get("route", "search")
+
+
+def _confidence_decision(state: dict) -> str:
+    """置信度决策：接受 / 重试 / 拒答。"""
     if state.get("should_refuse"):
-        return "do_refuse"
-
-    return "generate"
-
-
-# ================================================================
-# 4. 构建 StateGraph
-# ================================================================
-
-def build_agent_graph(llm, tools, retriever) -> StateGraph:
-    """构建 Agent 图"""
-
-    # 创建节点实例
-    nodes = AgentNodes(llm, tools, retriever)
-
-    # 创建图
-    graph = StateGraph(AgentState)
-
-    # 添加节点
-    graph.add_node("route", nodes.route_query)
-    graph.add_node("search", nodes.search_knowledge)
-    graph.add_node("check_confidence", nodes.check_confidence)
-    graph.add_node("execute_tool", nodes.execute_tool)
-    graph.add_node("generate_response", nodes.generate_response)
-    graph.add_node("generate_refusal", nodes.generate_refusal)
-
-    # 添加边
-    graph.add_edge(START, "route")
-
-    # 路由边
-    graph.add_conditional_edges(
-        "route",
-        should_search,
-        {
-            "do_search": "search",
-            "do_tool": "execute_tool",
-            "do_direct": "generate_response",
-            "do_refuse": "generate_refusal"
-        }
-    )
-
-    # 检索后的检查
-    graph.add_edge("search", "check_confidence")
-
-    # 置信度检查后的分支
-    graph.add_conditional_edges(
-        "check_confidence",
-        should_retry,
-        {
-            "generate": "generate_response",
-            "do_refuse": "generate_refusal"
-        }
-    )
-
-    # 工具执行后生成回答
-    graph.add_edge("execute_tool", "generate_response")
-
-    # 结束
-    graph.add_edge("generate_response", END)
-    graph.add_edge("generate_refusal", END)
-
-    return graph
+        return "refuse"
+    if state.get("should_retry"):
+        return "regenerate"
+    return "accept"
 
 
-# ================================================================
-# 5. 编译和执行
-# ================================================================
-
-def compile_agent(llm, tools, retriever):
-    """编译 Agent"""
-
-    graph = build_agent_graph(llm, tools, retriever)
-
-    # 添加 Checkpoint（支持暂停/恢复）
-    checkpointer = MemorySaver()
-
-    return graph.compile(checkpointer=checkpointer)
+def _post_moderation_decision(state: dict) -> str:
+    """内容审核后决策：接受 / 警告接受 / 拒答。"""
+    if state.get("should_refuse"):
+        return "refuse"
+    if state.get("is_low_confidence") or state.get("warnings"):
+        return "accept_with_warning"
+    return "accept"
 
 
-# ================================================================
-# 6. 执行示例
-# ================================================================
+# ==================== 全局单例 ====================
 
-async def run_agent(agent, user_query: str):
-    """运行 Agent"""
 
-    # 初始状态
-    initial_state = {
-        "messages": [],
-        "current_query": user_query,
-        "search_results": [],
-        "citations": [],
-        "confidence": 1.0,
-        "tools_used": [],
-        "tool_outputs": {},
-        "response": "",
-        "route": "",
-        "should_refuse": False,
-        "refusal_reason": "",
-        "version_info": {}
-    }
+_agent_graph: AgentGraph | None = None
 
-    # 执行
-    result = await agent.ainvoke(initial_state)
 
-    return result["response"]
+def get_agent_graph() -> AgentGraph:
+    """获取 AgentGraph 单例。"""
+    global _agent_graph
+    if _agent_graph is None:
+        _agent_graph = AgentGraph()
+    return _agent_graph
 ```
+
+> **与设计文档 v2.0 的差异**：
+> - v2.0 设计为 6 节点线性流程，v3.0 实际扩展为 11 节点
+> - 新增 `regenerate`（重生成）、`content_moderation`（内容审核）、`accept_with_warning`（带警告接受）、`error_handler`（异常兜底）
+> - 检索节点从 LlamaIndex 混合检索简化为 ChromaDB 向量检索 + 时效性调整
+> - 新增 `query_risk_level` 字段用于动态阈值判断
+
+> **与实际代码的对应关系**：实际代码中，Agent 节点为独立函数（`route_query`、`search_knowledge`、`check_confidence` 等），通过 `AgentGraph.build()` 注册到 `StateGraph`。完整节点代码见上方 `AgentGraph` 实现中的 `graph.add_node()` 调用列表。
+
+---
 
 ### 4.3 Checkpoint 功能（对话暂停/恢复）
 
 ```python
 # ================================================================
-# Checkpoint 功能：支持对话暂停和恢复
+# 实际实现：自定义 SqliteSaver（LangGraph 1.2.x 未内置）
 # ================================================================
 
-from langgraph.checkpoint.sqlite import SqliteSaver
+from app.agent.sqlite_checkpoint import SqliteSaver
 
-# 使用 SQLite 作为持久化 Checkpoint
-checkpoint_saver = SqliteSaver.from_conn_string(":memory:")
+# 持久化 SQLite Checkpoint（文件：data/agent_checkpoints.db）
+checkpoint_saver = SqliteSaver(db_path="data/agent_checkpoints.db")
 
-# 编译时添加 Checkpointer
-agent = graph.compile(checkpointer=checkpoint_saver)
+# 编译时配置 Checkpointer
+agent_graph = graph.compile(checkpointer=checkpoint_saver)
 
 
 # ================================================================
-# 对话恢复
+# 对话恢复（使用 thread_id 区分会话）
 # ================================================================
 
-async def resume_conversation(agent, thread_id: str, new_input: str):
-    """
-    恢复历史对话继续执行
-
-    thread_id: 对话线程 ID（用于区分不同用户/会话）
-    new_input: 用户新的输入
-    """
+async def resume_conversation(thread_id: str, new_input: str):
+    """恢复历史对话继续执行"""
 
     config = {
         "configurable": {
@@ -3181,7 +2175,7 @@ async def resume_conversation(agent, thread_id: str, new_input: str):
     }
 
     # 获取历史状态
-    current_state = agent.get_state(config)
+    current_state = agent_graph.get_state(config)
 
     # 更新状态继续执行
     updated_state = {
@@ -3190,28 +2184,44 @@ async def resume_conversation(agent, thread_id: str, new_input: str):
     }
 
     # 继续执行
-    result = await agent.ainvoke(updated_state, config)
+    result = await agent_graph.ainvoke(updated_state, config)
 
     return result["response"]
 
 
 # ================================================================
-# 对话回溯
+# SqliteSaver 存储结构
 # ================================================================
 
-async def get_conversation_history(agent, thread_id: str, limit: int = 10):
-    """获取对话历史"""
+"""
+checkpoints 表：
+  thread_id TEXT NOT NULL
+  checkpoint_id TEXT NOT NULL
+  parent_checkpoint_id TEXT
+  checkpoint TEXT NOT NULL (JSON)
+  metadata TEXT (JSON)
+  created_at REAL (julianday)
 
-    config = {"configurable": {"thread_id": thread_id}}
+checkpoint_writes 表：
+  thread_id TEXT NOT NULL
+  checkpoint_id TEXT NOT NULL
+  task_id TEXT NOT NULL
+  channel TEXT NOT NULL
+  idx INTEGER NOT NULL
+  value TEXT
 
-    # 获取所有历史状态
-    history = []
-
-    async for state in agent.astream(None, config, limit=limit):
-        history.append(state)
-
-    return history
+特性：
+- WAL 模式 + NORMAL 同步（性能与安全平衡）
+- 线程局部连接（threading.local）
+- JSON 序列化失败时降级到 pickle hex
+- 支持 get_tuple / list / put / put_writes / delete_thread
+"""
 ```
+
+> **与设计文档 v2.0 的差异**：
+> - v2.0 设计使用 `langgraph.checkpoint.sqlite.SqliteSaver`（内置），实际 LangGraph 1.2.x 未内置，需自定义实现
+> - 实际实现基于 `langgraph.checkpoint.base.BaseCheckpointSaver` 自行实现
+> - 存储路径：`data/agent_checkpoints.db`（项目根目录）
 
 ---
 
@@ -3221,742 +2231,550 @@ async def get_conversation_history(agent, thread_id: str, limit: int = 10):
 
 ```python
 # ================================================================
-# LangSmith 配置
+# LangSmith 全局初始化（core/langsmith_setup.py）
 # ================================================================
 
-import os
-from langsmith import traceable
-from langsmith.run_helpers import get_current_run_tree
-from langsmith.evaluation import evaluate
+"""LangSmith 全局追踪初始化。
 
-# 环境变量配置
-os.environ["LANGCHAIN_TRACING_V2"] = "true"
-os.environ["LANGCHAIN_API_KEY"] = "your-langsmith-api-key"
-os.environ["LANGCHAIN_PROJECT"] = "aiqa-agent"  # 项目名称
-os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
+作用：把 settings 里的 LangSmith 配置导出为 LangChain/LangSmith SDK 在运行时识别的
+环境变量，使阶段 1+ 节点上的 @traceable 装饰器自动上报调用链路。
 
-# ================================================================
-# 追踪装饰器
-# ================================================================
+为什么用环境变量而非代码传参：
+  LangChain 与 langsmith SDK 在导入/运行时直接读取 LANGSMITH_*/LANGCHAIN_* 环境变量，
+  统一在这里设置即"全局生效"；用户改 .env 即可开关或换项目，无需改代码。
 
-@traceable(
-    name="llm.generate",
-    tags=["llm", "generation"],
-    metadata={"model": "qwen-max"}
-)
-def tracked_llm_generate(prompt: str, system_prompt: str = None) -> str:
-    """
-    带追踪的 LLM 生成
-    LangSmith 会自动记录：
-    - 输入 prompt
-    - 输出 response
-    - 执行时间
-    - Token 消耗
-    - 错误信息
-    """
-    response = llm.chat(prompt, system_prompt=system_prompt)
-    return response
+调用时机：app 启动时（main.py lifespan）调用一次 setup_langsmith()。
+"""
 
+from app.core.config import settings
 
-@traceable(
-    name="retriever.search",
-    tags=["retriever", "rag"],
-    metadata={"retriever_type": "llamaindex"}
-)
-def tracked_search(query: str, top_k: int = 5) -> list[dict]:
-    """
-    带追踪的检索
-    LangSmith 会记录：
-    - 检索耗时
-    - 返回结果数
-    - 置信度分数
-    """
-    results = retriever.search(query, top_k=top_k)
-    return results
+def setup_langsmith() -> bool:
+    """根据配置设置 LangSmith 全局环境变量。返回是否启用了追踪。"""
+    if not settings.langsmith_enabled:
+        os.environ["LANGSMITH_TRACING"] = "false"
+        os.environ["LANGCHAIN_TRACING_V2"] = "false"
+        return False
 
+    api_key = settings.langsmith_api_key or os.environ.get("LANGSMITH_API_KEY", "")
+    if not api_key:
+        return False
 
-@traceable(
-    name="agent.route",
-    tags=["agent", "routing"],
-    metadata={"agent_version": "v2.0"}
-)
-def tracked_route(query: str, context: dict) -> str:
-    """
-    带追踪的路由决策
-    """
-    route = route_decision(query, context)
-    return route
-
-
-# ================================================================
-# 自动追踪 LangGraph
-# ================================================================
-
-from langgraph.checkpoint.langchain import LangChainCheckpointSaver
-
-# LangGraph 自动集成 LangSmith
-# 只需要在编译时指定 LangSmith 相关环境变量
-# 所有节点执行都会自动追踪
-
-agent = graph.compile(
-    checkpointer=LangChainCheckpointSaver(),  # 使用 LangChain 的 Checkpoint
-    debug=True  # 开启调试模式，记录更多细节
-)
-
-# ================================================================
-# 手动添加追踪事件
-# ================================================================
-
-from langsmith import trace
-
-def agent_with_custom_tracing(user_query: str):
-    """带自定义追踪的 Agent"""
-
-    with trace("agent.full_pipeline", tags=["agent"]) as parent_run:
-        # 添加自定义属性
-        parent_run.log(
-            {"user_query": user_query, "timestamp": datetime.now().isoformat()}
-        )
-
-        # 执行各阶段
-        with trace("route_decision") as route_run:
-            route = route_decision(user_query)
-            route_run.log({"route": route})
-
-        if route == "search":
-            with trace("knowledge_retrieval") as search_run:
-                results = retriever.search(user_query)
-                search_run.log({
-                    "result_count": len(results),
-                    "avg_confidence": sum(r.score for r in results) / len(results)
-                })
-
-        with trace("response_generation") as gen_run:
-            response = llm.generate(user_query)
-            gen_run.log({"response_length": len(response)})
-
-        return response
+    env = {
+        "LANGSMITH_TRACING": "true",
+        "LANGSMITH_API_KEY": api_key,
+        "LANGSMITH_PROJECT": settings.langsmith_project,
+        "LANGSMITH_ENDPOINT": settings.langsmith_endpoint,
+        "LANGCHAIN_TRACING_V2": "true",
+        "LANGCHAIN_API_KEY": api_key,
+        "LANGCHAIN_PROJECT": settings.langsmith_project,
+        "LANGCHAIN_ENDPOINT": settings.langsmith_endpoint,
+    }
+    os.environ.update(env)
+    return True
 ```
 
-### 5.2 LangSmith Dashboard 展示内容
+**调用时机**：`main.py` 的 `lifespan()` 启动时调用 `setup_langsmith()`。
+
+**节点追踪**：`agent/nodes.py` 中的 `route_query`、`search_knowledge`、`generate_response` 等函数通过 `@traceable` 装饰器自动上报 LangSmith。
+
+**LLM 追踪**：`core/llm.py` 的 `chat_with_usage()` 返回 token 消耗，配合 `@traceable` 自动记录模型名、延迟。
+
+> **与实际实现的对应关系**：
+> 1. **配置位置**：`core/config.py` 中的 `langsmith_enabled`、`langsmith_api_key`、`langsmith_project`、`langsmith_endpoint` 字段
+> 2. **初始化位置**：`main.py` 的 `lifespan()` 函数中调用 `setup_langsmith()`
+> 3. **追踪方式**：`@traceable` 装饰器标记在 `agent/nodes.py` 的关键节点函数上
+> 4. **LLM 追踪**：`core/llm.py` 的 `chat_with_usage()` 返回 token 消耗数据
+> 5. **不使用**：
+>    - `os.environ` 硬编码在业务代码中（仅在 `langsmith_setup.py` 中设置）
+>    - `LangChainCheckpointSaver`（实际使用自定义 `SqliteSaver`）
+>    - 手动 `trace()` 上下文管理器
+
+### 5.3 监控指标
+
+| 指标 | 来源 | 说明 |
+|------|------|------|
+| 总调用次数 | LangSmith | 所有 @traceable 节点的调用次数 |
+| 平均延迟 | LangSmith | 各节点执行时间 + LLM 响应时间 |
+| Token 消耗 | chat_with_usage() | prompt_tokens + completion_tokens |
+| 错误率 | LangSmith | 节点执行失败比例 |
+| 拒答率 | agent_refusal_log | 触发拒答的查询比例 |
+| 引用质量 | citation_quality_log | 句子级引用评估结果 |
+| 知识库健康度 | kb_health_log | 每日自动健康检查 |
+| LLM 成本 | llm_cost_log | 按天 + 模型聚合的成本统计 |
+
+---
+
+## 六、ChromaDB 向量检索 + 时效性调整
+
+> **技术选型说明**：本项目中检索层采用 **ChromaDB 本地嵌入式向量检索 + 自定义时效性调整**，不使用 LlamaIndex、BM25、Cohere Rerank 或 Elasticsearch。原因是 ChromaDB 已满足就业政策问答场景的检索需求，减少外部依赖和运维复杂度。
+
+### 6.1 检索架构概览
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                           LangSmith Dashboard                                  │
+│                              RAG 检索流程                                        │
 │                                                                                  │
+│  user_query                                                                     │
+│      │                                                                          │
+│      ▼                                                                          │
 │  ┌─────────────────────────────────────────────────────────────────────────┐   │
-│  │  项目概览                         最近 7 天                               │   │
-│  │                                                                              │   │
-│  │  总调用次数    平均延迟    Token消耗    错误率                           │   │
-│  │  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐                     │   │
-│  │  │  12,847 │  │  1.2s   │  │  2.3M   │  │  0.8%   │                     │   │
-│  │  └─────────┘  └─────────┘  └─────────┘  └─────────┘                     │   │
+│  │  敏感词过滤（ops_service.moderate）                                     │   │
+│  │  • 命中则拦截/替换后继续                                                  │   │
 │  └─────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                  │
+│      │                                                                          │
+│      ▼                                                                          │
 │  ┌─────────────────────────────────────────────────────────────────────────┐   │
-│  │  调用链路追踪 (Trace)                                                    │   │
-│  │                                                                              │   │
-│  │  Run ID: run_abc123                                                       │   │
-│  │  Status: ✅ Success                                                         │   │
-│  │  Duration: 2.34s                                                           │   │
-│  │                                                                              │   │
-│  │  ┌──────────────────────────────────────────────────────────────────┐     │   │
-│  │  │  🟢 route_decision (0.12s)                                        │     │   │
-│  │  │     Input: "毕业生落户需要准备什么材料"                              │     │   │
-│  │  │     Output: "search"                                               │     │   │
-│  │  └──────────────────────────────────────────────────────────────────┘     │   │
-│  │                              ↓                                              │   │
-│  │  ┌──────────────────────────────────────────────────────────────────┐     │   │
-│  │  │  🟢 knowledge_retrieval (0.45s)                                   │     │   │
-│  │  │     Query: "毕业生落户 材料"                                        │     │   │
-│  │  │     Results: 5 docs, Avg score: 0.82                              │     │   │
-│  │  └──────────────────────────────────────────────────────────────────┘     │   │
-│  │                              ↓                                              │   │
-│  │  ┌──────────────────────────────────────────────────────────────────┐     │   │
-│  │  │  🟢 response_generation (1.77s)                                   │     │   │
-│  │  │     Tokens: 342 in, 156 out                                       │     │   │
-│  │  │     Model: qwen-max                                               │     │   │
-│  │  └──────────────────────────────────────────────────────────────────┘     │   │
-│  │                                                                              │   │
+│  │  FAQ 快速匹配（rag_service.faq_match）                                   │   │
+│  │  • faq_collection 余弦相似度 >= 阈值 → 直接返回标准答案                   │   │
+│  │  • 不走 LLM，降低延迟和成本                                              │   │
 │  └─────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                  │
+│      │                                                                          │
+│      ▼                                                                          │
 │  ┌─────────────────────────────────────────────────────────────────────────┐   │
-│  │  Prompt 版本管理                                                         │   │
-│  │                                                                              │   │
-│  │  版本    创建时间        使用次数    状态                                 │   │
-│  │  v1.2    2024-01-15     3,421        ✅ 当前                            │   │
-│  │  v1.1    2024-01-10     8,234        ❌ 已废弃                          │   │
-│  │  v1.0    2024-01-05     1,192        ❌ 已废弃                          │   │
-│  │                                                                              │   │
-│  │  [+ 新建版本]  [📊 对比]  [📈 趋势分析]                                   │   │
+│  │  语义缓存检查（SemanticCache，Redis）                                    │   │
+│  │  • 精确匹配或语义相似度 >= threshold → 直接返回缓存答案                   │   │
+│  │  • 未命中则继续正常检索                                                  │   │
+│  └─────────────────────────────────────────────────────────────────────────┘   │
+│      │                                                                          │
+│      ▼                                                                          │
+│  ┌─────────────────────────────────────────────────────────────────────────┐   │
+│  │  ChromaDB 向量检索（rag_service.search）                                 │   │
+│  │  • collection: kb_chunks (主知识库)                                      │   │
+│  │  • top_k: retrieve_top_k（默认 5）                                       │   │
+│  │  • 最高分 < retrieve_score_threshold → 无答案兜底                         │   │
+│  └─────────────────────────────────────────────────────────────────────────┘   │
+│      │                                                                          │
+│      ▼                                                                          │
+│  ┌─────────────────────────────────────────────────────────────────────────┐   │
+│  │  Agent 节点后处理                                                        │   │
+│  │  • search_knowledge：过期文档过滤 + 降权标记（temporal_retriever）         │   │
+│  │  • check_confidence：动态置信度判断（hallucination_defense）              │   │
+│  │  • generate_response：带引用生成（chat_with_usage）                       │   │
+│  │  • check_consistency + verify_facts + content_moderation                  │   │
 │  └─────────────────────────────────────────────────────────────────────────┘   │
 │                                                                                  │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 5.3 性能评估和回归测试
+### 6.2 为什么选择 ChromaDB 直接检索？
+
+原因：
+- ✅ 复用现有 ChromaDB 基础设施
+- ✅ 减少外部依赖（无需 Cohere API、Elasticsearch）
+- ✅ 语义缓存（Redis）已覆盖性能优化需求
+- ✅ 时效性调整直接在检索结果上叠加，无需额外框架
+- ✅ 就业政策场景数据量适中，ChromaDB 足够支撑
+
+### 6.3 ChromaDB 向量检索
 
 ```python
 # ================================================================
-# 使用 LangSmith 进行自动化评估
+# ChromaDB 向量检索（实际 core/vectorstore.py）
+# V1 简化版：功能性 API（非类封装）
 # ================================================================
 
-from langsmith.schemas import Example, Run
-from langsmith.evaluation import evaluate, Comparison
-
-# ================================================================
-# 评估数据集
-# ================================================================
-
-EVAL_DATASET = [
-    {
-        "query": "应届毕业生落户上海需要准备哪些材料？",
-        "expected_topics": ["落户", "材料", "上海"],
-        "expected_response_type": "policy_answer"
-    },
-    {
-        "query": "三方协议丢了怎么办？",
-        "expected_topics": ["三方协议", "补办"],
-        "expected_response_type": "process_guide"
-    },
-    {
-        "query": "你好",
-        "expected_topics": [],
-        "expected_response_type": "greeting"
-    },
-    # ... 更多测试用例
-]
-
-
-# ================================================================
-# 评估器定义
-# ================================================================
-
-def response_quality_evaluator(run: Run, example: Example) -> dict:
-    """评估回答质量"""
-
-    # 获取输入输出
-    predicted = run.outputs.get("response", "")
-    expected = example.outputs
-
-    # 检查是否包含关键信息
-    topics = expected.get("expected_topics", [])
-    missing_topics = [t for t in topics if t not in predicted]
-
-    # 检查是否有引用
-    has_citation = "[来源:" in predicted or "来源:" in predicted
-
-    return {
-        "score": 1.0 if len(missing_topics) == 0 else 0.5,
-        "reason": f"Missing topics: {missing_topics}" if missing_topics else "All topics covered",
-        "metrics": {
-            "has_citation": has_citation,
-            "missing_topics_count": len(missing_topics),
-            "response_length": len(predicted)
-        }
-    }
-
-
-def citation_accuracy_evaluator(run: Run, example: Example) -> dict:
-    """评估引用准确性"""
-
-    citations = run.outputs.get("citations", [])
-
-    # 检查引用是否有效
-    valid_citations = sum(1 for c in citations if c.get("source"))
-
-    return {
-        "score": valid_citations / max(len(citations), 1),
-        "metrics": {
-            "total_citations": len(citations),
-            "valid_citations": valid_citations
-        }
-    }
-
-
-# ================================================================
-# 执行评估
-# ================================================================
-
-# 注册评估器
-evaluation = evaluate(
-    my_agent,
-    data=EVAL_DATASET,
-    evaluators={
-        "response_quality": response_quality_evaluator,
-        "citation_accuracy": citation_accuracy_evaluator
-    },
-    experiment_prefix="aiqa-agent-v2"
-)
-
-# 输出结果
-print(f"评估完成！")
-print(f"平均回答质量: {evaluation.metrics['response_quality']:.2%}")
-print(f"平均引用准确率: {evaluation.metrics['citation_accuracy']:.2%}")
-```
-
----
-
-## 六、LlamaIndex 检索优化
-
-### 6.1 为什么需要 LlamaIndex？
-
-```
-当前简单检索 vs LlamaIndex 高级检索：
-
-┌─────────────────────────────────────────────────────────────────────────┐
-│                        当前实现（简单向量检索）                            │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
-│  user_query → embedding → ChromaDB → top_k → response                  │
-│                                                                          │
-│  问题：                                                                   │
-│  ❌ 只用语义相似度，忽略关键词匹配                                         │
-│  ❌ 检索结果不一定是用户真正想要的                                         │
-│  ❌ 无法处理复杂查询（如多义词、同义词）                                   │
-│  ❌ 检索结果没有重排序                                                    │
-│                                                                          │
-└─────────────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────────────┐
-│                        LlamaIndex（混合检索）                            │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
-│  user_query                                                              │
-│      │                                                                   │
-│      ├─→ Query Rewriting (改写查询)                                      │
-│      │      • HyDE: 生成假设性答案 → 检索                                 │
-│      │      • 子问题: 拆分成多个子查询                                     │
-│      │      • 同义词扩展: 扩展查询词                                       │
-│      │                                                                   │
-│      ↓                                                                   │
-│      │                                                                   │
-│      ├─→ Vector Search (语义) ──┐                                        │
-│      │                          │                                        │
-│      ├─→ BM25 (关键词) ────────┼──→ Fusion (RRF) → Rerank → response   │
-│      │                          │                                        │
-│      ├─→ Knowledge Graph ──────┘                                        │
-│      │                                                                   │
-│      ↓                                                                   │
-│  Citation (引用追踪)                                                      │
-│                                                                          │
-│  优势：                                                                   │
-│  ✅ 语义 + 关键词双重匹配                                                 │
-│  ✅ 多种检索策略融合                                                      │
-│  ✅ Rerank 提升相关性                                                     │
-│  ✅ 内置引用追踪                                                          │
-│  ✅ 支持复杂查询优化                                                      │
-│                                                                          │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-### 6.2 LlamaIndex 配置
-
-```python
-# ================================================================
-# LlamaIndex 检索配置
-# ================================================================
-
-from llama_index.core import (
-    VectorStoreIndex,
-    SimpleDirectoryReader,
-    Document
-)
-from llama_index.core.node_parser import (
-    SentenceSplitter,
-    SemanticSplitterNodeParser
-)
-from llama_index.postprocessor.cohere_rerank import CohereRerank
-from llama_index.postprocessor import SimilarityPostprocessor
-from llama_index.core.retrievers import (
-    VectorIndexRetriever,
-    BM25Retriever,
-    QueryFusionRetriever
-)
-from llama_index.core.query_engine import QueryEngine
-from llama_index.llms.openai import OpenAI
-
-# ================================================================
-# 1. 文档解析器配置
-# ================================================================
-
-class DocumentProcessor:
-    """
-    文档处理配置
-    """
-
-    def __init__(self):
-        # 语义分块器（基于句子相似度）
-        self.semantic_splitter = SemanticSplitterNodeParser(
-            buffer_size=1,
-            sentence_splitter=self._sentence_splitter,
-            embed_model=OpenAIEmbedding("text-embedding-3-small"),
-            percentile_threshold=95  # 相似度低于 95% 分位点时断开
-        )
-
-        # 备选：简单分块器
-        self.sentence_splitter = SentenceSplitter(
-            chunk_size=512,
-            chunk_overlap=50,
-            separator=["。", "！", "？", "\n"]
-        )
-
-    @staticmethod
-    def _sentence_splitter(text: str) -> list[str]:
-        """句子分割"""
-        import re
-        sentences = re.split(r'[。！？\n]+', text)
-        return [s.strip() for s in sentences if s.strip()]
-
-
-# ================================================================
-# 2. 混合检索器配置
-# ================================================================
-
-class HybridRetriever:
-    """
-    混合检索器：向量 + BM25 + 知识图谱
-    """
-
-    def __init__(self, index: VectorStoreIndex, bm25_store):
-        self.index = index
-        self.bm25_store = bm25_store
-
-    def build_fusion_retriever(
-        self,
-        vector_weight: float = 0.6,
-        bm25_weight: float = 0.4,
-        top_k: int = 10
-    ) -> QueryFusionRetriever:
-        """
-        构建融合检索器
-
-        Args:
-            vector_weight: 向量检索权重
-            bm25_weight: BM25 权重
-            top_k: 最终返回数量
-        """
-
-        # 向量检索器
-        vector_retriever = VectorIndexRetriever(
-            index=self.index,
-            similarity_top_k=20,  # 初步检索更多
-            filters=None
-        )
-
-        # BM25 检索器
-        bm25_retriever = BM25Retriever.from_defaults(
-            index=self.bm25_store,
-            similarity_top_k=20,
-            verbose=False
-        )
-
-        # 融合检索器
-        fusion_retriever = QueryFusionRetriever(
-            retrievers=[vector_retriever, bm25_retriever],
-            mode=QueryFusionMode.RECIPROCAL_RANK,  # RRF 融合
-            # mode=QueryFusionMode.SIMPLE_AVERAGE,  # 加权平均
-            similarity_top_k=top_k,
-            weights=[vector_weight, bm25_weight]
-        )
-
-        return fusion_retriever
-
-
-# ================================================================
-# 3. Rerank 配置
-# ================================================================
-
-class RerankerConfig:
-    """
-    重排序配置
-    """
-
-    def __init__(self):
-        # Cohere Rerank
-        self.cohere_reranker = CohereRerank(
-            api_key=os.environ["COHERE_API_KEY"],
-            top_n=5,  # Rerank 后保留 5 个
-            model="rerank-multilingual-v2.0"
-        )
-
-        # 或者使用 BGE-Reranker
-        # self.bge_reranker = BGEReranker(
-        #     model="BAAI/bge-reranker-large",
-        #     top_n=5
-        # )
-
-
-# ================================================================
-# 4. Query Engine 配置
-# ================================================================
-
-class QueryEngineConfig:
-    """
-    查询引擎配置
-    """
-
-    def __init__(
-        self,
-        fusion_retriever: QueryFusionRetriever,
-        reranker,
-        llm
-    ):
-        self.retriever = fusion_retriever
-        self.reranker = reranker
-        self.llm = llm
-
-    def build_query_engine(self) -> QueryEngine:
-        """
-        构建查询引擎
-        """
-
-        # 配置后处理器
-        postprocessors = [
-            SimilarityPostprocessor(
-                similarity_cutoff=0.7  # 低于 0.7 相似度过滤
-            ),
-            self.reranker  # Rerank
-        ]
-
-        # 构建查询引擎
-        query_engine = self.index.as_query_engine(
-            retriever=self.retriever,
-            node_postprocessors=postprocessors,
-            response_mode="compact",  # compact/summarize/tree_summarize
-            verbose=True
-        )
-
-        return query_engine
-
-
-# ================================================================
-# 5. HyDE 查询改写配置
-# ================================================================
-
-from llama_index.core.prompts import PromptTemplate
-
-class HyDEConfig:
-    """
-    HyDE (Hypothetical Document Embeddings) 配置
-
-    原理：
-    1. 先让 LLM 生成一个"假设性答案"
-    2. 用这个假设性答案去检索
-    3. 因为假设性答案包含答案的结构，检索更准确
-    """
-
-    hyde_prompt_template = PromptTemplate(
-        input_variables=["query"],
-        template="""
-请为以下问题生成一个假设性的高质量答案。
-这个答案可以是略微不准确的，但结构应该是正确的。
-
-问题：{query}
-
-假设性答案：
 """
+> **与实际代码的对应关系**
+
+实际文件：`backend/app/core/vectorstore.py`
+
+实际采用功能性 API（非类封装），核心函数：
+
+1. _collection(name) → 获取/创建持久化集合（LRU 缓存）
+   - 使用 chromadb.PersistentClient(path=settings.chroma_dir)
+   - 集合元数据：hnsw:space = cosine
+
+2. _col(collection) → 默认集合快捷方式
+   - collection 为 None 时使用 settings.chroma_collection（默认 kb_chunks）
+
+3. upsert(ids, embeddings, documents, metadatas, collection) → None
+   - 新增/更新向量
+   - 外部传入 embedding（本模块不负责向量化）
+
+4. query(embedding, top_k, where, collection) → list[dict]
+   - 向量检索，返回 [{id, document, metadata, score}]
+   - score = 1 - distance（余弦相似度）
+
+5. delete(ids, where, collection) → None
+   - 按 id 或条件删除向量
+
+6. count(collection) → int
+   - 集合内向量数量
+
+存储约定：
+- 每个向量的 id 用文档分片的 vector_id（字符串）
+- metadata 至少含 document_id / chunk_id，便于检索后回查 MySQL
+- 向量由外部(embedding 模块)生成后传入，本模块不负责向量化
+"""
+
+from functools import lru_cache
+from typing import Optional
+
+import chromadb
+
+from app.core.config import settings
+
+
+@lru_cache
+def _collection(name: str):
+    """获取(或创建)持久化集合，余弦距离。"""
+    client = chromadb.PersistentClient(path=settings.chroma_dir)
+    return client.get_or_create_collection(
+        name=name,
+        metadata={"hnsw:space": "cosine"},
     )
 
-    def __init__(self, llm):
-        self.llm = llm
 
-    def get_hyde_retriever(self, index: VectorStoreIndex) -> Any:
-        """获取 HyDE 检索器"""
+def _col(collection: Optional[str]):
+    return _collection(collection or settings.chroma_collection)
 
-        from llama_index.core.query_engine import RetrieverQueryEngine
-        from llama_index.retrievers.bm25 import BM25Retriever
 
-        # HyDE 检索流程
-        hyde_retriever = HyDEQueryTransform(
-            llm=self.llm,
-            hyde_prompt=self.hyde_prompt_template,
-            include_original=True  # 同时检索原始查询
+def upsert(
+    ids: list[str],
+    embeddings: list[list[float]],
+    documents: list[str],
+    metadatas: list[dict],
+    collection: Optional[str] = None,
+) -> None:
+    """新增/更新向量。collection 默认文档分片集合。"""
+    if not ids:
+        return
+    _col(collection).upsert(ids=ids, embeddings=embeddings, documents=documents, metadatas=metadatas)
+
+
+def query(
+    embedding: list[float], top_k: int = 5, where: Optional[dict] = None, collection: Optional[str] = None
+) -> list[dict]:
+    """向量检索，返回 [{id, document, metadata, score}]，score 为相似度(1-距离)。"""
+    res = _col(collection).query(
+        query_embeddings=[embedding],
+        n_results=top_k,
+        where=where,
+        include=["documents", "metadatas", "distances"],
+    )
+    hits: list[dict] = []
+    ids = res.get("ids", [[]])[0]
+    docs = res.get("documents", [[]])[0]
+    metas = res.get("metadatas", [[]])[0]
+    dists = res.get("distances", [[]])[0]
+    for i in range(len(ids)):
+        hits.append(
+            {
+                "id": ids[i],
+                "document": docs[i] if i < len(docs) else None,
+                "metadata": metas[i] if i < len(metas) else {},
+                "score": round(1 - dists[i], 4) if i < len(dists) else None,
+            }
         )
+    return hits
 
-        return hyde_retriever
+
+def delete(ids: Optional[list[str]] = None, where: Optional[dict] = None, collection: Optional[str] = None) -> None:
+    """按 id 或条件删除向量。"""
+    if ids:
+        _col(collection).delete(ids=ids)
+    elif where:
+        _col(collection).delete(where=where)
+
+
+def count(collection: Optional[str] = None) -> int:
+    """集合内向量数量。"""
+    return _col(collection).count()
 ```
 
-### 6.3 完整检索流程
+### 6.4 时效性调整
 
 ```python
 # ================================================================
-# 完整检索流程实现
+# 时效性调整（实际 agent/temporal_retriever.py）
+# V1 简化版：仅标记过期，不修改得分
 # ================================================================
 
-class EnhancedRetriever:
+"""
+> **与实际代码的对应关系**
+
+实际文件：`backend/app/agent/temporal_retriever.py`
+
+V1 实现（简化版）：
+- filter_expired_docs(db, doc_ids) → set[int]
+  - 查询 MySQL 返回已过期文档 ID 集合
+  - 由 search_knowledge 节点调用（需要 db 会话）
+
+- apply_temporal_adjustment(hits, expired_ids) → list[dict]
+  - V1 仅添加 is_expired 标记，不修改得分
+  - 由上层节点决定是否降权或展示警告
+
+- get_expiring_soon_docs(db, warning_days) → list[dict]
+  - 供监控模块调用
+
+V2 预留接口：
+- TemporalAwareRetriever.retrieve() → raise NotImplementedError
+  - 设计意图：综合得分 = similarity × 0.7 + temporal × 0.3
+"""
+
+from datetime import date
+from sqlalchemy.orm import Session
+from app.models import KbDocument
+
+
+def filter_expired_docs(db: Session, doc_ids: list[int]) -> set[int]:
+    """过滤已过期文档 ID（V1 简化版）。"""
+    if not doc_ids:
+        return set()
+
+    today = date.today()
+    expired_rows = (
+        db.query(KbDocument.id)
+        .filter(
+            KbDocument.id.in_(doc_ids),
+            KbDocument.status == 1,
+            KbDocument.expire_date.isnot(None),
+            KbDocument.expire_date < today,
+        )
+        .all()
+    )
+    return {row.id for row in expired_rows}
+
+
+def apply_temporal_adjustment(hits: list[dict], expired_ids: set[int]) -> list[dict]:
+    """对检索结果应用时效性调整（V1 简化：仅标记过期）。
+
+    V1 不修改得分，仅对过期文档添加 is_expired 标记。
     """
-    增强检索器：集成 LlamaIndex 高级功能
+    adjusted = []
+    for h in hits:
+        doc_id = (h.get("metadata") or {}).get("document_id")
+        h_copy = dict(h)
+        h_copy["is_expired"] = doc_id in expired_ids if doc_id is not None else False
+        adjusted.append(h_copy)
+    return adjusted
+```
+
+### 6.5 引用构建
+
+```python
+# ================================================================
+# 引用构建（实际 agent/citation_tracker.py）
+# V1 简化版：Chunk 级别引用 + 质量评估
+# ================================================================
+
+"""
+> **与实际代码的对应关系**
+
+实际文件：`backend/app/agent/citation_tracker.py`
+
+V1 实现（当前代码库中的实际实现）：
+
+1. build_citations(hits) → list[dict]
+   - 从检索结果构建引用列表（chunk 级别）
+   - 每条引用包含 rank / document_id / document_title / chunk_id /
+     score / page_no / snippet（截断至 CITATION_SNIPPET_MAX_LENGTH=200 字符）
+
+2. evaluate_citation_quality(citations) → dict
+   - 评估引用整体质量（V1 简化版）
+   - 仅基于检索得分和引用数量做统计
+   - 按得分区间映射为 direct / indirect / none
+   - V2 再引入 SentenceLevelCitationTracker 做逐句验证
+
+3. SentenceLevelCitationTracker（V2 预留接口）
+   - track() 方法未实现，raise NotImplementedError
+   - 设计意图：将回答按 。！？； 切分为句子
+   - 对每个句子找最相关的来源 chunk（Embedding 相似度）
+   - 使用 LLM 验证引用支持度（direct/indirect/none）
+"""
+
+from app.agent.constants import CITATION_SNIPPET_MAX_LENGTH
+
+
+def build_citations(hits: list[dict]) -> list[dict]:
+    """从检索结果构建引用列表（V1 简化：chunk 级别）。
+
+    Args:
+        hits: 检索结果列表（来自 rag_service.search）
+
+    Returns:
+        引用列表，每条包含 rank / document_id / document_title / chunk_id /
+        score / page_no / snippet
     """
-
-    def __init__(self, config: dict):
-        # 初始化各组件
-        self.doc_processor = DocumentProcessor()
-        self.hybrid_retriever = HybridRetriever(...)
-        self.reranker = RerankerConfig().cohere_reranker
-        self.query_engine = QueryEngineConfig(...).build_query_engine()
-
-    def query_with_citations(self, user_query: str) -> dict:
-        """
-        带引用的查询
-
-        返回：
-        {
-            "answer": "...",
-            "citations": [...],
-            "metadata": {...}
-        }
-        """
-
-        # 1. Query Rewriting (可选)
-        rewritten_query = self._rewrite_query(user_query)
-
-        # 2. 执行查询
-        response = self.query_engine.query(rewritten_query)
-
-        # 3. 提取引用信息
-        citations = self._extract_citations(response)
-
-        # 4. 计算置信度
-        confidence = self._calculate_confidence(response, citations)
-
-        return {
-            "answer": response.response,
-            "citations": citations,
-            "confidence": confidence,
-            "metadata": {
-                "query": user_query,
-                "rewritten_query": rewritten_query,
-                "retrieval_time": response.metadata.get("retrieval_time"),
-                "total_nodes": len(response.source_nodes)
+    citations = []
+    for rank, h in enumerate(hits, start=1):
+        citations.append(
+            {
+                "rank": rank,
+                "document_id": h.get("document_id"),
+                "document_title": h.get("document_title"),
+                "chunk_id": h.get("chunk_id"),
+                "score": h.get("score"),
+                "page_no": h.get("page_no"),
+                "snippet": (h.get("content") or "")[:CITATION_SNIPPET_MAX_LENGTH],
             }
+        )
+    return citations
+
+
+def evaluate_citation_quality(citations: list[dict]) -> dict:
+    """评估引用整体质量（V1 简化版）。
+
+    V1 仅基于检索得分和引用数量做统计，不做 LLM 级验证。
+    V2 再引入 SentenceLevelCitationTracker 做逐句验证。
+    """
+    total = len(citations)
+    if total == 0:
+        return {
+            "quality_score": 0.0,
+            "direct_count": 0,
+            "indirect_count": 0,
+            "none_count": 0,
+            "avg_score": 0.0,
+            "issues": ["无引用"],
         }
 
-    def _rewrite_query(self, query: str) -> str:
-        """
-        查询改写：使用 LlamaIndex 的查询改写功能
-        """
+    scores = [c.get("score") or 0.0 for c in citations]
+    avg_score = sum(scores) / total
 
-        # 子问题查询改写
-        sub_questions = self.llm.predict(
-            "请将这个问题拆分成多个可以独立检索的子问题。\n"
-            f"问题：{query}\n\n"
-            "子问题（用 | 分隔）："
+    # V1 简化：按得分区间映射为 direct / indirect / none
+    direct_count = sum(1 for s in scores if s >= 0.75)
+    indirect_count = sum(1 for s in scores if 0.40 <= s < 0.75)
+    none_count = total - direct_count - indirect_count
+
+    quality_score = (
+        direct_count * 1.0 + indirect_count * 0.5 + none_count * 0.0
+    ) / total
+
+    issues = []
+    if none_count > 0:
+        issues.append(f"{none_count} 条引用得分较低")
+    if avg_score < 0.5:
+        issues.append(f"平均引用得分偏低({avg_score:.2f})")
+
+    return {
+        "quality_score": round(quality_score, 4),
+        "direct_count": direct_count,
+        "indirect_count": indirect_count,
+        "none_count": none_count,
+        "avg_score": round(avg_score, 4),
+        "issues": issues,
+    }
+
+
+# ===== V2 预留接口（句子级别引用）=====
+
+class SentenceLevelCitationTracker:
+    """句子级别引用追踪器（V2 实现，V1 仅预留接口）。"""
+
+    def __init__(self, embed_model: Any, llm_client: Any) -> None:
+        self.embed_model = embed_model
+        self.llm_client = llm_client
+
+    def track(self, response: str, source_chunks: list[dict]) -> list[dict]:
+        """追踪句子级别引用（V2 实现）。"""
+        raise NotImplementedError("SentenceLevelCitationTracker.track() 将在 V2 实现")
+```
+
+### 6.6 语义缓存（Redis）
+
+```python
+# ================================================================
+# 语义缓存（core/semantic_cache.py）
+# ================================================================
+
+"""
+语义缓存架构（Redis + 内存 LRU 双层）：
+
+L1: 进程内存 LRU 缓存（embedding_memory_cache_size 条，默认 4096）
+L2: Redis 缓存（embedding_cache_ttl 秒，默认 86400 = 24h）
+
+命中条件：语义相似度 >= semantic_cache_similarity_threshold（默认 0.92）
+
+降级策略：
+  - Redis 不可用时自动走 L1 内存缓存
+  - L1 未命中时走实际 Embedding + 检索
+  - 开关：semantic_cache_enabled（默认 true）
+"""
+```
+
+### 6.7 完整检索流程
+
+```python
+# ================================================================
+# 实际检索流程（agent/tools.py → knowledge_search + rag_service.py → search）
+# ================================================================
+
+"""
+> **与实际代码的对应关系**
+
+实际文件：
+- `backend/app/agent/tools.py` → knowledge_search() + ToolCallTracker
+- `backend/app/services/rag_service.py` → search() + _build_messages()
+- `backend/app/core/vectorstore.py` → query() / upsert() / delete() / count()
+- `backend/app/agent/temporal_retriever.py` → filter_expired_docs() / apply_temporal_adjustment()
+- `backend/app/agent/citation_tracker.py` → build_citations()
+
+实际检索流程（search_knowledge 节点中）：
+1. 检索去重：相同查询跳过（retry > 0 时允许不同查询）
+2. 重试时改写查询：去掉具体限定词，扩大召回（_broaden_query）
+3. 调用 knowledge_search() → 内部调用 rag_service.search()
+4. 工具调用计数：ToolCallTracker.record()
+5. 过滤过期文档：filter_expired_docs(db, doc_ids)
+6. 时效性调整：apply_temporal_adjustment(filtered_hits, expired_ids)
+7. 构建引用：build_citations(adjusted_hits)
+8. 计算置信度：adjusted_hits[0]["score"] if adjusted_hits else 0.0
+
+注意：FAQ 命中优先和语义缓存在 ask/ask_stream 中处理，不在 Agent 节点内。
+"""
+
+from app.agent.tools import knowledge_search, ToolCallTracker
+from app.agent.citation_tracker import build_citations
+from app.agent.temporal_retriever import apply_temporal_adjustment, filter_expired_docs
+from app.core.database import SessionLocal
+
+
+def _broaden_query(query: str) -> str:
+    """重试时去掉限定词，扩大检索范围。"""
+    stop_words = ["具体", "详细", "最新", "今年", "2024", "2025", "怎么", "如何", "什么"]
+    broadened = query
+    for sw in stop_words:
+        broadened = broadened.replace(sw, "")
+    broadened = " ".join(broadened.split())
+    return broadened if broadened else query
+
+
+# agent/tools.py 中的 knowledge_search 实现：
+def knowledge_search(query: str, top_k: int = 5) -> list[dict]:
+    """知识库语义检索。
+
+    返回命中片段列表，每条包含 document_title / content / score / page_no。
+    无结果时返回空列表。
+    """
+    from app.services.rag_service import search as rag_search
+
+    db = SessionLocal()
+    try:
+        return rag_search(db, query, top_k=top_k)
+    finally:
+        db.close()
+
+
+# agent/tools.py 中的 ToolCallTracker：
+class ToolCallTracker:
+    """工具调用计数器 + 调用记录。"""
+
+    def __init__(self) -> None:
+        self.count: int = 0
+        self.calls: list[dict] = []
+
+    def record(self, tool_name: str, args: dict, result: Any) -> None:
+        self.count += 1
+        self.calls.append(
+            {
+                "tool": tool_name,
+                "args": args,
+                "result_summary": str(result)[:200] if result else None,
+            }
         )
 
-        # 如果拆分成功，用子问题替代
-        if "|" in sub_questions:
-            return sub_questions.replace("|", " ")
-
-        return query
-
-    def _extract_citations(self, response) -> list[dict]:
-        """
-        提取引用信息
-        """
-
-        citations = []
-
-        for i, source_node in enumerate(response.source_nodes, 1):
-            citation = {
-                "ref_id": f"[{i}]",
-                "text": source_node.text,
-                "doc_title": source_node.metadata.get("doc_title", "未知来源"),
-                "page": source_node.metadata.get("page_num", "N/A"),
-                "score": source_node.score,
-                "valid_until": source_node.metadata.get("valid_until"),
-                "category": source_node.metadata.get("category", "general")
-            }
-            citations.append(citation)
-
-        return citations
-
-    def _calculate_confidence(
-        self,
-        response,
-        citations: list[dict]
-    ) -> float:
-        """
-        计算置信度
-        """
-
-        if not citations:
-            return 0.0
-
-        # 综合评分
-        score_factors = []
-
-        # 1. 平均相似度分数
-        avg_similarity = sum(c["score"] for c in citations) / len(citations)
-        score_factors.append(avg_similarity * 0.4)
-
-        # 2. 引用数量（越多越可信，但不能太多）
-        citation_count_bonus = min(len(citations) / 5, 1.0) * 0.2
-        score_factors.append(citation_count_bonus)
-
-        # 3. 来源权威性
-        authority_score = self._calculate_authority(citations)
-        score_factors.append(authority_score * 0.2)
-
-        # 4. 时效性
-        recency_score = self._calculate_recency(citations)
-        score_factors.append(recency_score * 0.2)
-
-        return min(sum(score_factors), 1.0)
-
-    def _calculate_authority(self, citations: list[dict]) -> float:
-        """计算来源权威性"""
-
-        authority_map = {
-            "国办发": 1.0,      # 国务院文件
-            "人社部": 0.95,    # 人力资源部
-            "教育部": 0.95,
-            "省": 0.8,
-            "市": 0.7,
-            "学校": 0.6,
-            "general": 0.5
-        }
-
-        scores = []
-        for cite in citations:
-            title = cite.get("doc_title", "")
-            score = 0.5
-            for key, val in authority_map.items():
-                if key in title:
-                    score = val
-                    break
-            scores.append(score)
-
-        return sum(scores) / len(scores) if scores else 0.5
-
-    def _calculate_recency(self, citations: list[dict]) -> float:
-        """计算时效性"""
-
-        from datetime import datetime, timedelta
-
-        now = datetime.now()
-        recency_scores = []
-
-        for cite in citations:
-            valid_until = cite.get("valid_until")
-
-            if not valid_until:
-                recency_scores.append(0.5)
-                continue
-
-            if isinstance(valid_until, str):
-                valid_until = datetime.fromisoformat(valid_until)
-
-            days_until_expire = (valid_until - now).days
-
-            if days_until_expire < 0:
-                recency_scores.append(0.0)  # 已过期
-            elif days_until_expire < 30:
-                recency_scores.append(0.5)  # 即将过期
-            else:
-                recency_scores.append(1.0)  # 有效
-
-        return sum(recency_scores) / len(recency_scores) if recency_scores else 0.5
+    def should_stop(self, max_calls: int = 3) -> bool:
+        return self.count >= max_calls
 ```
 
 ---
@@ -3990,11 +2808,20 @@ class EnhancedRetriever:
 │                              │                  │                                 │
 │                              │ • id (PK)        │                                 │
 │                              │ • conversation_id│                                │
-│                              │ • role (user/ai) │                                │
+│                              │ • role           │                                │
 │                              │ • content        │                                │
-│                              │ • confidence     │  ←--- 新增：置信度             │
-│                              │ • is_no_answer   │  ←--- 新增：无法回答标记       │
-│                              │ • tool_used      │  ←--- 新增：使用的工具         │
+│                              │ • answer_type    │  ←--- 实际：答案类型(1/2/3)    │
+│                              │ • is_no_answer   │                                │
+│                              │ • rewritten_query│  ←--- 实际：查询改写结果        │
+│                              │ • confidence     │                                │
+│                              │ • query_risk_level │ ←--- 实际：风险等级          │
+│                              │ • consistency_issues │ ←--- 实际：一致性问题(JSON) │
+│                              │ • fact_issues    │  ←--- 实际：事实问题(JSON)      │
+│                              │ • temporal_warnings │ ←--- 实际：时效警告(JSON)   │
+│                              │ • llm_model      │                                │
+│                              │ • prompt_tokens  │  ←--- 实际：输入token           │
+│                              │ • completion_tokens │ ←--- 实际：输出token        │
+│                              │ • latency_ms     │  ←--- 实际：响应延迟            │
 │                              │ • created_at     │                                 │
 │                              └────────┬─────────┘                                 │
 │                                       │ 1:N                                        │
@@ -4004,52 +2831,72 @@ class EnhancedRetriever:
 │                              │ (消息引用)       │                                 │
 │                              │                  │                                 │
 │                              │ • id (PK)        │                                 │
-│                              │ • message_id(FK) │                                 │
-│                              │ • document_id(FK)│────────┐                       │
-│                              │ • chunk_id       │        │                       │
-│                              │ • ref_text       │        │ N:1                   │
-│                              │ • page_no        │        ▼                       │
-│                              │ • valid_until    │  ┌──────────────┐              │
-│                              │ • score          │  │ kb_document   │              │
-│                              │ • rank_no        │  │ (文档)        │              │
-│                              │ • citation_text  │  │              │              │
-│                              │ • source_url     │  │ • id (PK)     │              │
-│                              └─────────────────┘  │ • title       │              │
-│                                                  │ • category    │              │
-│                                                  │ • version      │              │
-│                                                  │ • valid_from   │              │
-│                                                  │ • valid_until  │              │
-│                                                  └──────────────┘              │
+│                              │ • message_id(FK) │                                │
+│                              │ • document_id    │                                │
+│                              │ • chunk_id       │                                │
+│                              │ • snippet        │  ←--- 实际：引用片段           │
+│                              │ • score          │                                │
+│                              │ • rank_no        │                                │
+│                              │ • created_at     │                                 │
+│                              └─────────────────┘                                 │
 │                                                                                  │
 │  ┌─────────────────┐         ┌─────────────────┐         ┌─────────────────┐   │
 │  │ kb_chunk        │         │ kb_faq          │         │ kb_category     │   │
 │  │ (文档块)        │         │ (FAQ)           │         │ (文档分类)      │   │
 │  │                 │         │                 │         │                 │   │
 │  │ • id (PK)       │         │ • id (PK)       │         │ • id (PK)       │   │
-│  │ • document_id(FK)│       │ • question      │         │ • name          │   │
-│  │ • content        │         │ • answer        │         │ • parent_id(FK) │   │
-│  │ • chunk_index    │         │ • keywords      │         │ • level        │   │
-│  │ • char_count     │         │ • hit_count     │         │ • sort_order   │   │
-│  │ • embedding      │         │ • status        │         └─────────────────┘   │
-│  │ • vector_id      │         │ • created_by(FK)│                               │
-│  └─────────────────┘         │ • created_at    │                               │
-│                              └─────────────────┘                               │
+│  │ • document_id   │         │ • question      │         │ • name          │   │
+│  │ • content       │         │ • answer        │         │ • parent_id     │   │
+│  │ • chunk_index   │         │ • keywords      │         │ • level         │   │
+│  │ • char_count    │         │ • hit_count     │         │ • sort_order    │   │
+│  │ • embedding     │         │ • is_current    │         └─────────────────┘   │
+│  │ • vector_id     │         │ • created_at    │                               │
+│  └─────────────────┘         └─────────────────┘                               │
 │                                                                                  │
 │  ┌─────────────────┐         ┌─────────────────┐         ┌─────────────────┐   │
-│  │ op_sensitive_word│       │ op_query_log    │         │ agent_tool_call│   │
-│  │ (敏感词)        │         │ (查询日志)       │         │ (工具调用日志)  │   │
+│  │ op_sensitive_word│       │ op_query_log    │         │ kb_health_log   │   │
+│  │ (敏感词)        │         │ (查询日志)       │         │ (健康度记录)    │   │
 │  │                 │         │                 │         │                 │   │
 │  │ • id (PK)       │         │ • id (PK)       │         │ • id (PK)       │   │
-│  │ • word          │         │ • user_id (FK)  │         │ • message_id(FK)│        │
-│  │ • category      │         │ • query         │         │ • tool_name    │       │
-│  │ • action        │         │ • route         │         │ • tool_input    │       │
-│  │ • status        │         │ • confidence    │         │ • tool_output   │       │
-│  │ • created_by(FK)│         │ • response_time │         │ • status       │       │
-│  │ • created_at    │         │ • created_at     │         │ • created_at   │       │
+│  │ • word          │         │ • user_id       │         │ • check_date    │   │
+│  │ • category      │         │ • query         │         │ • health_score  │   │
+│  │ • action        │         │ • route         │         │ • warning_count │   │
+│  │ • status        │         │ • confidence    │         │ • expired_count │   │
+│  │ • created_at    │         │ • created_at    │         │ • created_at    │   │
 │  └─────────────────┘         └─────────────────┘         └─────────────────┘   │
 │                                                                                  │
+│  ┌─────────────────┐         ┌─────────────────┐         ┌─────────────────┐   │
+│  │ llm_cost_log    │         │ agent_refusal_log│        │ consistency_    │   │
+│  │ (LLM成本)       │         │ (拒答记录)       │        │ issue_log       │   │
+│  │                 │         │                 │        │ (一致性记录)    │   │
+│  │ • id (PK)       │         │ • id (PK)       │        │                 │   │
+│  │ • stat_date     │         │ • query         │        │ • id (PK)       │   │
+│  │ • model         │         │ • refusal_reason│        │ • message_id    │   │
+│  │ • tokens_in/out │         │ • confidence    │        │ • contradiction │   │
+│  │ • cost_usd      │         │ • risk_level    │        │ • severity      │   │
+│  │ • created_at    │         │ • created_at    │        │ • created_at    │   │
+│  └─────────────────┘         └─────────────────┘         └─────────────────┘   │
+│                                                                                  │
+│  ┌─────────────────┐         ┌─────────────────┐                                 │
+│  │ citation_quality│         │ fact_verification│                                │
+│  │ _log            │         │ _log             │                                │
+│  │ (引用质量)      │         │ (事实核验)       │                                │
+│  │                 │         │                  │                                │
+│  │ • id (PK)       │         │ • id (PK)        │                                │
+│  │ • message_id    │         │ • message_id     │                                │
+│  │ • quality_score │         │ • fact_type      │                                │
+│  │ • direct_count  │         │ • extracted_value│                                │
+│  │ • created_at    │         │ • is_valid       │                                │
+│  └─────────────────┘         └─────────────────┘                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+> **实际实现说明**：以上表结构由 SQLAlchemy ORM 模型定义（位于 `backend/app/models/` 目录），通过 Alembic 迁移自动生成 DDL。模型文件划分：
+> - `models/user.py` → 用户与权限 (`sys_*`)
+> - `models/knowledge.py` → 知识库 (`kb_*`)
+> - `models/qa.py` → 问答与会话 (`qa_*`)
+> - `models/ops.py` → 运营·安全 (`op_*`)
+> - `models/monitor.py` → 监控告警 (`kb_*_log`, `llm_cost_log`, `agent_refusal_log`, `citation_quality_log`, `consistency_issue_log`, `fact_verification_log`)
 
 #### 7.1.2 详细表结构
 
@@ -5853,337 +4700,435 @@ MODIFY COLUMN `run_id` VARCHAR(200) COMMENT 'LangSmith Run ID';
 
 ### 7.3 核心参数定义
 
-#### 7.3.1 系统参数
+#### 7.3.1 系统参数（实际 config.py）
 
 ```python
 # ================================================================
-# 系统配置参数
+# 实际配置参数（backend/app/core/config.py → Settings）
 # ================================================================
 
-class SystemConfig:
-    """系统级配置"""
+# ===== 应用配置 =====
+app_name: str = "高校智慧就业服务平台 - AI问答模块"
+app_env: str = "dev"                          # 环境：dev / production
+app_debug: bool = False                       # 调试模式
+api_prefix: str = "/api/v1"                   # API 前缀
 
-    # ===== Agent 配置 =====
-    AGENT_MAX_ITERATIONS = 10  # Agent 最大迭代次数
-    AGENT_MAX_TOKENS = 4000    # Agent 输出最大 Token 数
-    AGENT_TEMPERATURE = 0.7    # Agent 生成温度
+server_host: str = "127.0.0.1"                # 监听地址（0.0.0.0 允许局域网）
+server_port: int = 8000                       # 监听端口
 
-    # ===== 检索配置 =====
-    RETRIEVAL_TOP_K = 10       # 初步检索数量
-    RETRIEVAL_FINAL_K = 5     # 最终返回数量
-    SIMILARITY_THRESHOLD = 0.7  # 相似度阈值
-    RERANK_TOP_N = 5          # Rerank 后保留数量
+# ===== 数据库 =====
+db_host: str = "127.0.0.1"
+db_port: int = 3306
+db_user: str = "root"
+db_password: str                               # 生产环境必须设置
+db_name: str = "claudecode_rag"
+db_charset: str = "utf8mb4"
+db_pool_size: int = 10
+db_pool_recycle: int = 3600
+db_echo: bool = False
 
-    # ===== 置信度配置 =====
-    CONFIDENCE_HIGH = 0.8     # 高置信度
-    CONFIDENCE_MEDIUM = 0.5    # 中置信度
-    CONFIDENCE_LOW = 0.3       # 低置信度
-    REFUSE_THRESHOLD = 0.5     # 拒答阈值
+# ===== JWT 鉴权 =====
+jwt_secret: str                                # 生产环境必须设置（建议64位）
+jwt_algorithm: str = "HS256"
+jwt_expire_minutes: int = 120                  # 令牌有效期（默认2小时）
 
-    # ===== 版本管理 =====
-    VERSION_STALE_DAYS = 90    # 知识库过期天数
-    VERSION_CHECK_INTERVAL = 24  # 版本检查间隔（小时）
+# ===== 文件上传 =====
+upload_dir: str = "uploads"
+max_upload_mb: int = 50
 
-    # ===== 限流配置 =====
-    RATE_LIMIT_FREE = 100      # 免费版日调用限制
-    RATE_LIMIT_PRO = 500      # 专业版日调用限制
-    RATE_LIMIT_ENTERPRISE = -1 # 企业版不限
+# ===== RAG / LLM =====
+dashscope_api_key: str                         # 从环境变量 DASHSCOPE_API_KEY 读取
+dashscope_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+embedding_model: str = "text-embedding-v4"     # 通义千问 Embedding
+embedding_dim: int = 1024
+llm_model: str = "qwen3.7-max"                 # 默认 LLM 模型
 
+# ===== 语义分块 =====
+chunk_min_chars: int = 200                     # 块最小字符数
+chunk_max_chars: int = 500                     # 块最大字符数
+semantic_breakpoint_percentile: int = 95       # 语义断点百分位阈值
 
-class RetrievalConfig:
-    """检索配置"""
+# ===== 向量库（ChromaDB 本地嵌入式）=====
+chroma_dir: str = "chroma_data"                # ChromaDB 数据目录
+chroma_collection: str = "kb_chunks"           # 主知识库集合名
 
-    # ===== 向量检索 =====
-    VECTOR_WEIGHT = 0.6        # 向量检索权重
-    BM25_WEIGHT = 0.4          # BM25 权重
-    EMBEDDING_MODEL = "text-embedding-v4"
-    EMBEDDING_DIM = 1024
+# ===== Redis（Embedding 缓存 L2）=====
+redis_enabled: bool = True                     # 总开关
+redis_host: str = "127.0.0.1"
+redis_port: int = 6379
+redis_db: int = 0
+redis_password: str = ""
+redis_socket_timeout: float = 1.5              # 连接超时（秒）
+embedding_cache_ttl: int = 86400               # Embedding 缓存过期（秒，默认24h）
+embedding_memory_cache_size: int = 4096        # L1 内存 LRU 容量（条数）
 
-    # ===== Query Rewriting =====
-    ENABLE_HYDE = True        # 是否启用 HyDE
-    ENABLE_SUBQUESTION = True  # 是否启用子问题拆分
-    ENABLE_SYONYMY = True      # 是否启用同义词扩展
+# ===== LangSmith =====
+langsmith_enabled: bool = True                 # 全局开关
+langsmith_api_key: str                         # 从环境变量 LANGSMITH_API_KEY 读取
+langsmith_project: str = "myproject"
+langsmith_endpoint: str = "https://api.smith.langchain.com"
 
-    # ===== Rerank =====
-    RERANKER_MODEL = "cohere/rerank-multilingual-v2.0"
-    RERANK_API_KEY = ""       # Cohere API Key
+# ===== 检索问答 =====
+retrieve_top_k: int = 5                        # 检索返回数量
+retrieve_score_threshold: float = 0.4          # 最高分低于此值走"无法回答"
+faq_collection: str = "kb_faqs"               # FAQ 集合名
+faq_score_threshold: float = 0.75              # FAQ 问法相似度阈值
 
-    # ===== Fusion =====
-    FUSION_MODE = "reciprocal_rank"  # RRF / simple_average / dist_based_score
+# ===== Agent 配置 =====
+agent_enabled: bool = False                    # 总开关（默认关闭，灰度开启）
+agent_max_iterations: int = 10                 # 最大迭代步数
+agent_timeout_seconds: int = 60                # 超时时间（秒）
+agent_recursion_limit: int = 15                # LangGraph 递归限制
+agent_rate_limit_per_user: int = 10            # 每用户每分钟最大请求数
+agent_rate_limit_global: int = 100             # 全局每分钟最大请求数
 
+# ===== 幻觉防御配置 =====
+high_risk_threshold: float = 0.80              # 高风险阈值
+medium_risk_threshold: float = 0.65            # 中风险阈值
+low_risk_threshold: float = 0.40               # 低风险阈值
 
-class LLMRouterConfig:
-    """LLM 路由配置"""
+# ===== 时效性配置 =====
+kb_warning_days: int = 30                      # 知识库过期告警天数
+kb_freshness_half_life: int = 180              # 新鲜度半衰期（天）
 
-    # 主模型
-    PRIMARY_MODEL = "qwen-max"
-    PRIMARY_API_KEY = ""
+# ===== 成本控制 =====
+daily_cost_threshold_usd: float = 10.0         # 日成本阈值（美元）
+monthly_cost_threshold_usd: float = 300.0      # 月成本阈值（美元）
 
-    # 备用模型
-    FALLBACK_MODEL = "qwen-plus"
-    FALLBACK_RETRIES = 2
-
-    # 模型参数
-    TEMPERATURE_MAP = {
-        "qwen-max": 0.7,
-        "qwen-plus": 0.5,
-        "gpt-4-turbo": 0.7
-    }
-
-    MAX_TOKENS_MAP = {
-        "qwen-max": 2000,
-        "qwen-plus": 1500,
-        "gpt-4-turbo": 2000
-    }
-
-    # 成本配置
-    COST_PER_1K_INPUT = {
-        "qwen-max": 0.02,
-        "qwen-plus": 0.005,
-        "gpt-4-turbo": 0.03
-    }
-
-    COST_PER_1K_OUTPUT = {
-        "qwen-max": 0.02,
-        "qwen-plus": 0.01,
-        "gpt-4-turbo": 0.06
-    }
+# ===== 语义缓存 =====
+semantic_cache_enabled: bool = True            # 语义缓存总开关
+semantic_cache_similarity_threshold: float = 0.92  # 语义相似度阈值
+semantic_cache_ttl: int = 86400                # 缓存过期时间（秒，默认24h）
 ```
 
----
-
-## 八、部署架构（完整版）
-
-### 8.1 Kubernetes 部署配置
-
-```yaml
-# k8s/deployment.yaml
-
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: aiqa-agent
-  namespace: aiqa-prod
-  labels:
-    app: aiqa-agent
-    version: v2.0
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: aiqa-agent
-  template:
-    metadata:
-      labels:
-        app: aiqa-agent
-        version: v2.0
-      annotations:
-        langsmith.project: "aiqa-agent"
-        langsmith.run.name: "{{ pod.name }}"
-    spec:
-      containers:
-        - name: agent
-          image: ${REGISTRY}/aiqa-agent:v2.0
-          ports:
-            - containerPort: 8000
-          env:
-            # LLM 配置
-            - name: DASHSCOPE_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: aiqa-secrets
-                  key: dashscope-key
-            - name: LANGCHAIN_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: aiqa-secrets
-                  key: langsmith-key
-            - name: LANGCHAIN_TRACING_V2
-              value: "true"
-            - name: LANGCHAIN_PROJECT
-              value: "aiqa-agent-prod"
-
-            # 数据库配置
-            - name: DB_HOST
-              value: "mysql-headless"
-            - name: DB_PORT
-              value: "3306"
-            - name: REDIS_HOST
-              value: "redis-headless"
-            - name: REDIS_PORT
-              value: "6379"
-
-            # 检索配置
-            - name: VECTOR_WEIGHT
-              value: "0.6"
-            - name: BM25_WEIGHT
-              value: "0.4"
-            - name: RERANK_TOP_N
-              value: "5"
-
-            # 资源限制
-            - name: MAX_WORKERS
-              value: "10"
-            - name: TIMEOUT_SECONDS
-              value: "60"
-          resources:
-            requests:
-              memory: "2Gi"
-              cpu: "1000m"
-            limits:
-              memory: "4Gi"
-              cpu: "2000m"
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: 8000
-            initialDelaySeconds: 30
-            periodSeconds: 10
-          readinessProbe:
-            httpGet:
-              path: /ready
-              port: 8000
-            initialDelaySeconds: 5
-            periodSeconds: 5
+> **与实际代码的对应关系**：`backend/app/core/config.py` 中的 `Settings` 类使用 Pydantic Settings 从 `.env` 文件读取配置，通过 `get_settings()` 获取全局单例。关键特性：
+> - 生产环境必须设置 `DASHSCOPE_API_KEY`、`JWT_SECRET`（至少32位）、`DB_PASSWORD`
+> - `jwt_secret` 在开发环境自动生成 64 位随机密钥
+> - `database_url` 属性自动构建 SQLAlchemy 连接串（PyMySQL 驱动）
 
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  name: aiqa-agent-service
-  namespace: aiqa-prod
-spec:
-  selector:
-    app: aiqa-agent
-  ports:
-    - port: 80
-      targetPort: 8000
-  type: ClusterIP
 
----
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: aiqa-agent-hpa
-  namespace: aiqa-prod
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: aiqa-agent
-  minReplicas: 2
-  maxReplicas: 20
-  metrics:
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          type: Utilization
-          averageUtilization: 70
-    - type: Pods
-      pods:
-        metric:
-          name: http_requests_per_second
-        target:
-          type: AverageValue
-          averageValue: "100"
+## 八、部署架构
+
+> **实际部署方案**：项目使用 Docker Compose 一键部署（FastAPI + MySQL 8.4 + Redis 7 + ChromaDB 本地存储），暂未使用 Kubernetes 编排。以下是实际部署文件与配置。
+
+### 8.1 部署架构图
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                  Docker Compose 栈                                              │
+├──────────────────┬────────────────────────────────────────────────────────────┤
+│   Service        │   说明                                                        │
+├──────────────────┼────────────────────────────────────────────────────────────┤
+│   api            │   FastAPI 后端（主要服务，多阶段构建）                        │
+│   db             │   MySQL 8.4（业务数据 + 监控日志）                           │
+│   redis          │   Redis 7（Embedding 语义缓存 L2）                          │
+│   (无独立chroma) │   ChromaDB 嵌入 api 容器，数据持久化到 chroma_data volume     │
+└──────────────────┴────────────────────────────────────────────────────────────┘
+
+数据卷：
+  - db_data         → MySQL 数据目录
+  - redis_data      → Redis 持久化
+  - chroma_data     → 向量库数据（挂载到 api 容器 /app/chroma_data）
+  - agent_checkpoints → Agent checkpoint SQLite（挂载到 api 容器 /app/data）
+  - uploads         → 上传文件（挂载到 api 容器 /app/uploads）
 ```
 
-### 8.2 Helm Chart Values
+### 8.2 Dockerfile（backend/Dockerfile）
+
+```dockerfile
+# ===== 构建阶段 =====
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+
+# 安装构建依赖（GCC + MySQL 客户端头文件）
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    default-libmysqlclient-dev \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# 复制依赖文件并安装到 /install
+COPY requirements.txt .
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+# ===== 运行阶段 =====
+FROM python:3.11-slim AS runtime
+
+WORKDIR /app
+
+# 安装运行时依赖（MySQL 客户端共享库）
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    default-libmysqlclient81 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# 从构建阶段复制 Python 包
+COPY --from=builder /install /usr/local
+
+# 复制应用代码
+COPY app/                    ./app/
+COPY alembic.ini            ./
+COPY migrations/             ./migrations/
+
+# 创建持久化数据目录
+RUN mkdir -p data uploads chroma_data
+
+# 非 root 用户运行（安全）
+RUN groupadd -r appuser && useradd -r -g appuser -d /app appuser
+USER appuser
+
+# 暴露端口
+EXPOSE 8000
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=15s \
+    CMD curl -f http://localhost:8000/health/live || exit 1
+
+# 启动命令（2 个 worker，生产环境根据 CPU 调整）
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+```
+
+### 8.3 Docker Compose 配置
 
 ```yaml
-# helm/values.yaml
+# docker-compose.yml（项目根目录）
+version: "3.9"
 
-replicaCount: 3
+services:
+  # ===== MySQL 8.4 =====
+  db:
+    image: mysql:8.4
+    container_name: rag_db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-123456}
+      MYSQL_DATABASE: ${DB_NAME:-claudecode_rag}
+      MYSQL_CHARSET: utf8mb4
+      MYSQL_COLLATION: utf8mb4_0900_ai_ci
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rag_net
 
-image:
-  repository: aiqa-agent
-  tag: v2.0
-  pullPolicy: IfNotPresent
-
-env:
-  LANGCHAIN_TRACING_V2: "true"
-  LANGCHAIN_PROJECT: "aiqa-agent-{{ .Release.Namespace }}"
-  VECTOR_WEIGHT: "0.6"
-  BM25_WEIGHT: "0.4"
-  RERANK_TOP_N: "5"
-  CONFIDENCE_THRESHOLD: "0.7"
-
-resources:
-  limits:
-    cpu: 2000m
-    memory: 4Gi
-  requests:
-    cpu: 1000m
-    memory: 2Gi
-
-autoscaling:
-  enabled: true
-  minReplicas: 2
-  maxReplicas: 20
-  targetCPUUtilizationPercentage: 70
-
-service:
-  type: ClusterIP
-  port: 80
-
-ingress:
-  enabled: true
-  className: nginx
-  annotations:
-    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
-  hosts:
-    - host: api.aiqa.example.com
-      paths:
-        - path: /
-          pathType: Prefix
-
-dependencies:
-  mysql:
-    enabled: true
-    image: mysql:8.0
-    persistence:
-      enabled: true
-      size: 50Gi
-
+  # ===== Redis（Embedding 缓存）=====
   redis:
-    enabled: true
     image: redis:7-alpine
-    persistence:
-      enabled: true
-      size: 10Gi
+    container_name: rag_redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save 60 1
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rag_net
 
-  chromadb:
-    enabled: true
-    image: chromadb/chroma:latest
-    persistence:
-      enabled: true
-      size: 100Gi
+  # ===== FastAPI 后端 =====
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: rag_api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # 数据库
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: ${DB_PASSWORD:-123456}
+      DB_NAME: ${DB_NAME:-claudecode_rag}
+      # LLM
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY}
+      LLM_MODEL: ${LLM_MODEL:-qwen-plus}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-v4}
+      # JWT
+      JWT_SECRET: ${JWT_SECRET}
+      # Redis
+      REDIS_ENABLED: true
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # Agent
+      AGENT_ENABLED: ${AGENT_ENABLED:-true}
+      # 环境
+      APP_ENV: ${APP_ENV:-production}
+      APP_DEBUG: "false"
+    volumes:
+      - ./backend/data:/app/data
+      - ./backend/uploads:/app/uploads
+      - ./backend/chroma_data:/app/chroma_data
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks:
+      - rag_net
+
+volumes:
+  db_data:
+    driver: local
+  redis_data:
+    driver: local
+  chroma_data:
+    driver: local
+
+networks:
+  rag_net:
+    driver: bridge
 ```
 
----
+> **说明**：
+> 1. ChromaDB 不独立部署，以内嵌模式运行在 api 容器内，数据持久化到 `chroma_data` volume
+> 2. 环境变量通过 `.env` 文件注入（`DASHSCOPE_API_KEY`、`JWT_SECRET`、`DB_PASSWORD` 等）
+> 3. `AGENT_ENABLED` 控制 Agent 功能开关（灰度发布用）
+> 4. 使用多阶段构建减小镜像体积（最终镜像约 300-400MB）
 
-## 九、技术栈完整清单 (v2.0)
+### 8.4 部署步骤
+
+#### 1. 前置要求
+
+| 软件 | 版本 | 说明 |
+|------|------|------|
+| Docker Engine | 24+ | `docker --version` |
+| Docker Compose | v2+ | `docker compose version` |
+| 内存 | >= 4GB | MySQL + Redis + API |
+| 磁盘 | >= 10GB | 镜像 + 数据卷 |
+
+#### 2. 配置环境变量
+
+项目根目录的 `.env`：
+
+```env
+# ===== 数据库 =====
+DB_PASSWORD=YourSecurePassword123!
+DB_NAME=claudecode_rag
+
+# ===== LLM (DashScope) =====
+DASHSCOPE_API_KEY=your_dashscope_api_key_here
+LLM_MODEL=qwen3.7-max
+
+# ===== JWT =====
+JWT_SECRET=your_very_long_and_random_secret_key_here_at_least_32_chars
+
+# ===== Agent =====
+AGENT_ENABLED=true
+
+# ===== 环境 =====
+APP_ENV=production
+APP_DEBUG=false
+```
+
+#### 3. 启动服务
+
+```bash
+cd d:\enployment_service_agent
+
+# 构建并启动所有服务
+docker compose up -d --build
+
+# 查看日志
+docker compose logs -f api
+
+# 查看服务状态
+docker compose ps
+```
+
+#### 4. 初始化数据库
+
+```bash
+# 执行 Alembic 迁移
+docker compose exec api python -m alembic upgrade head
+```
+
+#### 5. 验证部署
+
+```bash
+# 健康检查
+curl http://localhost:8000/health/live
+
+# 登录测试
+curl -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}'
+```
+
+### 8.5 常用运维命令
+
+```bash
+# 停止服务（保留数据）
+docker compose down
+
+# 停止并删除数据（会清库）
+docker compose down -v
+
+# 重启某个服务
+docker compose restart api
+
+# 查看日志
+docker compose logs -f --tail=100 api
+
+# 进入容器调试
+docker compose exec api bash
+
+# 备份数据库
+docker compose exec db mysqldump -u root -p123456 claudecode_rag > backup.sql
+
+# 查看资源占用
+docker compose stats
+```
+
+### 8.6 生产环境建议
+
+| 建议 | 说明 |
+|------|------|
+| secrets 管理 | 使用 Docker secrets 或环境变量注入，不要将密钥写进镜像 |
+| 资源限制 | 为每个服务添加 `deploy.resources.limits` |
+| 日志驱动 | 配置 `json-file` 或 `fluentd` 日志驱动 |
+| 备份策略 | 定期备份 `db_data` volume |
+| HTTPS | 前端通过反向代理（Nginx/Traefik）接入，配置 TLS |
+| 监控 | 添加 Prometheus + Grafana 监控容器状态 |
+
+## 九、技术栈完整清单 (v3.0)
 
 | 层级 | 技术选型 | 版本 | 说明 |
 |------|---------|------|------|
-| **Agent 框架** | LangGraph | 0.1+ | 状态机工作流 |
-| **LLM 监控** | LangSmith | - | 调用追踪、Prompt 管理 |
-| **检索框架** | LlamaIndex | 0.10+ | 混合检索、Rerank |
-| **向量数据库** | ChromaDB | 0.5+ | 向量存储 |
-| **全文检索** | Elasticsearch | 8.x | BM25 检索 |
-| **Rerank 模型** | Cohere | - | 重排序 |
+| **Agent 框架** | LangGraph | 1.2.6 | 状态机工作流，11 节点 |
+| **LLM 监控** | LangSmith | - | 调用链路追踪、Prompt 管理 |
+| **向量数据库** | ChromaDB | 嵌入式 | 本地向量检索，无需独立服务 |
 | **后端框架** | FastAPI | 0.115+ | 异步 API |
-| **数据库** | MySQL | 8.0 | 主业务数据 |
-| **缓存** | Redis | 7.0 | 会话、工具缓存 |
-| **LLM API** | DashScope | - | 通义千问 |
+| **数据库** | MySQL | 8.4 | 主业务数据 + 监控日志 |
+| **缓存** | Redis | 7.0 | Embedding 语义缓存（L2） |
+| **LLM API** | DashScope | - | 通义千问（qwen3.7-max） |
+| **Checkpoint** | SqliteSaver | 自定义 | LangGraph 对话持久化（SQLite） |
 | **前端** | Vue3 + TS | 3.4+ | 用户界面 |
-| **容器化** | Docker | 24+ | 容器化 |
-| **编排** | Kubernetes | 1.28+ | 容器编排 |
-| **监控** | Prometheus + Grafana | - | 指标监控 |
-| **日志** | ELK Stack | - | 日志聚合 |
+| **容器化** | Docker | 24+ | 多阶段构建 |
+| **迁移** | Alembic | - | 数据库版本管理 |
 
 ---
 
@@ -6207,23 +5152,23 @@ dependencies:
 | **如何集成？** | 设置环境变量 + 使用 @traceable 装饰器，LangGraph 自动集成 |
 | **企业级价值？** | 可观测性是 SRE 核心，快速定位问题，优化成本 |
 
-### 10.3 LlamaIndex 面试价值
+### 10.3 检索方案面试价值
 
 | 面试点 | 回答要点 |
 |--------|---------|
-| **简单向量检索的问题？** | 只用语义相似度，忽略关键词；无法处理多义词、同义词 |
-| **混合检索原理？** | 向量检索 + BM25 关键词检索，用 RRF 算法融合结果 |
-| **Rerank 为什么必要？** | 向量检索 Top-K 不一定是最相关的，Rerank 用更强大的模型重新排序 |
-| **HyDE 是什么？** | 让 LLM 先生成假设性答案，再检索，提高检索准确率 |
-| **Citation 如何实现？** | LlamaIndex 内置节点级引用追踪，自动记录来源 |
+| **为什么不用 LlamaIndex？** | 项目已使用 ChromaDB 作为向量库，复用现有基础设施减少依赖；就业政策场景数据量适中，ChromaDB 足够支撑；减少外部依赖（Cohere API、Elasticsearch）降低运维复杂度 |
+| **ChromaDB 本地嵌入式 vs HTTP 模式？** | 本地嵌入式模式更简单，无需独立部署 ChromaDB 服务，适合中小规模场景；数据持久化到本地文件系统，备份方便 |
+| **时效性调整怎么做？** | V1 简化版：仅标记过期文档（is_expired），不修改检索得分；由上层节点决定如何处理过期文档；V2 预留 TemporalAwareRetriever 接口（综合得分 = similarity × 0.7 + temporal × 0.3） |
+| **语义缓存如何工作？** | Redis L2 + 内存 LRU L1 双层缓存；命中条件：语义相似度 >= 0.92；不可用时自动降级到内存缓存 |
+| **引用如何追踪？** | ChromaDB 检索结果自带 metadata（document_id, chunk_id 等），通过 citation_tracker.build_citations() 构建 chunk 级别引用列表；evaluate_citation_quality() 评估引用质量；V2 预留 SentenceLevelCitationTracker |
 
 ### 10.4 大模型问题解决方案
 
 | 问题 | 解决方案 | 面试亮点 |
 |------|---------|---------|
-| **幻觉** | 三重防护：置信度过滤 + 引用强制 + 拒答机制 | 不是简单加 Prompt，而是系统性工程 |
-| **不可溯源** | LlamaIndex Citation + 句子级引用 + 引用验证 | 精确到句子级别的溯源体系 |
-| **时效性低** | 知识库版本管理 + 时效性标记 + 实时数据通道 | 完整的版本生命周期管理 |
+| **幻觉** | 五重防护：动态置信度阈值 + 置信度过滤 + 引用强制 + 一致性检查 + 事实核验 | 不是简单加 Prompt，而是系统性工程 |
+| **不可溯源** | ChromaDB metadata + 句子级引用 + LLM judge 支持度验证 | 精确到句子级别的溯源体系 |
+| **时效性低** | ChromaDB 时效性调整（指数衰减）+ 健康度监控 + 过期告警 | 算法优化 + 可观测性闭环 |
 
 ---
 
@@ -6235,40 +5180,56 @@ dependencies:
 # .env 配置
 
 # ===== LangSmith =====
-LANGCHAIN_TRACING_V2=true
-LANGCHAIN_API_KEY=your-langsmith-key
-LANGCHAIN_PROJECT=aiqa-agent-prod
-LANGCHAIN_ENDPOINT=https://api.smith.langchain.com
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=your-langsmith-key
+LANGSMITH_PROJECT=myproject
+LANGSMITH_ENDPOINT=https://api.smith.langchain.com
 
 # ===== LLM =====
 DASHSCOPE_API_KEY=your-dashscope-key
-OPENAI_API_KEY=your-openai-key
-
-# ===== Cohere Rerank =====
-COHERE_API_KEY=your-cohere-key
+LLM_MODEL=qwen3.7-max
+EMBEDDING_MODEL=text-embedding-v4
 
 # ===== Database =====
 DB_HOST=localhost
 DB_PORT=3306
 DB_USER=root
 DB_PASSWORD=xxx
-DB_NAME=aiqa_db
+DB_NAME=claudecode_rag
 
 # ===== Redis =====
+REDIS_ENABLED=true
 REDIS_HOST=localhost
 REDIS_PORT=6379
 REDIS_PASSWORD=xxx
-
-# ===== Retrieval =====
-VECTOR_WEIGHT=0.6
-BM25_WEIGHT=0.4
-RERANK_TOP_N=5
-SIMILARITY_THRESHOLD=0.7
+EMBEDDING_CACHE_TTL=86400
 
 # ===== Agent =====
-AGENT_MAX_ITERATIONS=10
-CONF_INTERVAL=0.7
-REFUSE_THRESHOLD=0.5
+AGENT_ENABLED=true
+AGENT_RECURSION_LIMIT=15
+
+# ===== Retrieval =====
+RETRIEVE_TOP_K=5
+RETRIEVE_SCORE_THRESHOLD=0.4
+FAQ_SCORE_THRESHOLD=0.75
+
+# ===== 幻觉防御 =====
+HIGH_RISK_THRESHOLD=0.80
+MEDIUM_RISK_THRESHOLD=0.65
+LOW_RISK_THRESHOLD=0.40
+
+# ===== 语义缓存 =====
+SEMANTIC_CACHE_ENABLED=true
+SEMANTIC_CACHE_SIMILARITY_THRESHOLD=0.92
+SEMANTIC_CACHE_TTL=86400
+
+# ===== 时效性 =====
+KB_WARNING_DAYS=30
+KB_FRESHNESS_HALF_LIFE=180
+
+# ===== 成本控制 =====
+DAILY_COST_THRESHOLD_USD=10.0
+MONTHLY_COST_THRESHOLD_USD=300.0
 ```
 
 ### B. 安装命令
@@ -6285,20 +5246,160 @@ pip install langgraph langchain-core langchain-community
 # LangSmith
 pip install langsmith
 
-# LlamaIndex
-pip install llama-index llama-index-core llama-index-postprocessor-cohere-rerank
-
 # 向量库
 pip install chromadb
 
-# 全文检索
-pip install elasticsearch
+# Redis 缓存
+pip install redis
 
 # 工具库
-pip install httpx tiktoken
+pip install httpx tiktoken python-dotenv pydantic-settings
 ```
 
 ---
 
-*文档版本：v2.0*
-*最后更新：2026-06*
+---
+
+## 附录 D：Docker 部署方案
+
+> 本节提供完整的容器化部署方案，支持一键启动整个技术栈。
+
+### D.1 部署架构
+
+```
+┌──────────────────────────────────────────────────────┐
+│                  Docker Compose 栈                     │
+├──────────────────┬────────────────────────────────────┤
+│   Service        │   说明                              │
+├──────────────────┼────────────────────────────────────┤
+│   api            │   FastAPI 后端（主要服务）          │
+│   db             │   MySQL 8.4（业务数据 + 日志）      │
+│   redis          │   Redis（Embedding 缓存）           │
+│   chroma        │   ChromaDB（向量库持久化）          │
+└──────────────────┴────────────────────────────────────┘
+
+数据卷：
+  - db_data         → MySQL 数据目录
+  - redis_data      → Redis 持久化
+  - chroma_data     → 向量库数据
+  - agent_checkpoints → Agent checkpoint SQLite
+  - uploads         → 上传文件
+```
+
+### D.2 部署文件清单
+
+| 文件 | 位置 | 说明 |
+|------|------|------|
+| `Dockerfile` | `backend/Dockerfile` | 多阶段构建，最终镜像约 300-400MB |
+| `docker-compose.yml` | 项目根目录 | 编排 api / db / redis / chroma |
+| `.dockerignore` | 项目根目录 | 排除 venv、数据目录、文档等 |
+| `.env` | 项目根目录 | Docker Compose 的环境变量替换源 |
+
+### D.3 部署步骤
+
+#### 1. 前置要求
+
+| 软件 | 版本 | 说明 |
+|------|------|------|
+| Docker Engine | 24+ | `docker --version` |
+| Docker Compose | v2+ | `docker compose version` |
+| 内存 | >= 4GB | MySQL + Redis + Chroma + API |
+| 磁盘 | >= 10GB | 镜像 + 数据卷 |
+
+#### 2. 配置环境变量
+
+项目根目录的 `.env`：
+
+```env
+# ===== 数据库 =====
+DB_PASSWORD=YourSecurePassword123!
+DB_NAME=claudecode_rag
+
+# ===== LLM (DashScope) =====
+DASHSCOPE_API_KEY=your_dashscope_api_key_here
+
+# ===== JWT =====
+JWT_SECRET=your_very_long_and_random_secret_key_here_at_least_32_chars
+
+# ===== Agent =====
+AGENT_ENABLED=true
+
+# ===== 环境 =====
+APP_ENV=production
+APP_DEBUG=false
+```
+
+#### 3. 启动服务
+
+```bash
+cd d:\enployment_service_agent
+
+# 构建并启动所有服务
+docker compose up -d --build
+
+# 查看日志
+docker compose logs -f api
+
+# 查看服务状态
+docker compose ps
+```
+
+#### 4. 初始化数据库
+
+```bash
+# 执行 Alembic 迁移
+docker compose exec api python -m alembic upgrade head
+```
+
+#### 5. 验证部署
+
+```bash
+# 健康检查
+curl http://localhost:8000/health/live
+
+# 登录测试
+curl -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}'
+```
+
+### D.4 常用运维命令
+
+```bash
+# 停止服务（保留数据）
+docker compose down
+
+# 停止并删除数据（⚠️ 会清库）
+docker compose down -v
+
+# 重启某个服务
+docker compose restart api
+
+# 查看日志
+docker compose logs -f --tail=100 api
+
+# 进入容器调试
+docker compose exec api bash
+
+# 备份数据库
+docker compose exec db mysqldump -u root -p123456 claudecode_rag > backup.sql
+
+# 查看资源占用
+docker compose stats
+```
+
+### D.5 生产环境建议
+
+| 建议 | 说明 |
+|------|------|
+|  secrets 管理 | 使用 Docker secrets 或环境变量注入，不要将密钥写进镜像 |
+|  资源限制 | 为每个服务添加 `deploy.resources.limits` |
+|  日志驱动 | 配置 `json-file` 或 `fluentd` 日志驱动 |
+|  备份策略 | 定期备份 `db_data` volume |
+|  HTTPS | 前端通过反向代理（Nginx/Traefik）接入，配置 TLS |
+|  监控 | 添加 Prometheus + Grafana 监控容器状态 |
+
+---
+
+*文档版本：v3.0*
+*最后更新：2026-06-24*

@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import * as convApi from '@/api/conversation'
-import { streamAsk } from '@/composables/useStreamChat'
-import type { ChatMessage, Conversation, Message } from '@/types/chat'
+import * as chatApi from '@/api/chat'
+import type { AgentAskResult, ChatMessage, Conversation, Message } from '@/types/chat'
 
 function toChatMessage(m: Message): ChatMessage {
   return {
@@ -11,6 +11,29 @@ function toChatMessage(m: Message): ChatMessage {
     content: m.content,
     isNoAnswer: m.is_no_answer === 1,
     fromFaq: m.answer_type === 2,
+  }
+}
+
+function toAgentChatMessage(result: AgentAskResult): ChatMessage {
+  return {
+    id: result.message_id || undefined,
+    role: 'assistant',
+    content: result.response,
+    isNoAnswer: result.is_no_answer,
+    references: result.references,
+    citations: result.citations,
+    confidence: result.confidence,
+    route: result.route,
+    queryRiskLevel: result.query_risk_level,
+    isLowConfidence: result.is_low_confidence,
+    isError: result.is_error,
+    consistencyIssues: result.consistency_issues,
+    factIssues: result.fact_issues,
+    temporalWarnings: result.temporal_warnings,
+    warnings: result.warnings,
+    requestId: result.request_id,
+    llmTokensIn: result.llm_tokens_in,
+    llmTokensOut: result.llm_tokens_out,
   }
 }
 
@@ -43,7 +66,6 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  // 进入新会话状态（暂不落库，首次提问时由后端自动建会话）
   function startNewConversation() {
     currentId.value = null
     messages.value = []
@@ -57,8 +79,7 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  // 流式问答（F5）：发问 → SSE 逐字追加 → done 补全引用与状态
-  async function send(question: string) {
+  async function sendAgent(question: string) {
     const q = question.trim()
     if (!q || sending.value) return
     messages.value.push({ role: 'user', content: q })
@@ -67,31 +88,22 @@ export const useChatStore = defineStore('chat', () => {
     sending.value = true
     const isNew = currentId.value === null
 
-    await streamAsk(q, currentId.value, {
-      onDelta: (text) => {
-        assistant.content += text
-      },
-      onDone: (meta) => {
-        assistant.id = meta.message_id
-        assistant.isNoAnswer = meta.is_no_answer
-        assistant.blocked = meta.blocked
-        assistant.fromFaq = meta.from_faq
-        assistant.references = meta.references
-        assistant.streaming = false
-        currentId.value = meta.conversation_id
-      },
-      onError: (err) => {
-        if (!assistant.content) {
-          assistant.content = err.message || '回答失败，请稍后重试。'
-          assistant.isNoAnswer = true
-        }
-        assistant.streaming = false
-      },
-    })
-
-    sending.value = false
-    if (isNew && currentId.value !== null) {
-      await loadConversations()
+    try {
+      const result = (await chatApi.askAgent(q, currentId.value ?? undefined)) as AgentAskResult
+      Object.assign(assistant, toAgentChatMessage(result))
+      currentId.value = result.conversation_id || currentId.value
+    } catch (e) {
+      if (!assistant.content) {
+        assistant.content = e instanceof Error ? e.message : '回答失败，请稍后重试。'
+        assistant.isNoAnswer = true
+        assistant.isError = true
+      }
+      assistant.streaming = false
+    } finally {
+      sending.value = false
+      if (isNew && currentId.value !== null) {
+        await loadConversations()
+      }
     }
   }
 
@@ -106,6 +118,6 @@ export const useChatStore = defineStore('chat', () => {
     selectConversation,
     startNewConversation,
     removeConversation,
-    send,
+    sendAgent,
   }
 })

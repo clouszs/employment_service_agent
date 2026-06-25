@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import BigInteger, DateTime, Integer, Numeric, SmallInteger, String, Text, func
+from sqlalchemy import BigInteger, DateTime, Integer, JSON, Numeric, SmallInteger, String, Text, func
 from sqlalchemy.dialects.mysql import MEDIUMTEXT
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -51,6 +51,11 @@ class QaMessage(Base):
     prompt_tokens: Mapped[Optional[int]] = mapped_column(Integer, comment="Prompt消耗token")
     completion_tokens: Mapped[Optional[int]] = mapped_column(Integer, comment="生成消耗token")
     latency_ms: Mapped[Optional[int]] = mapped_column(Integer, comment="响应耗时(毫秒)")
+    confidence: Mapped[Optional[float]] = mapped_column(Numeric(5, 4), comment="综合置信度(0-1)")
+    query_risk_level: Mapped[Optional[str]] = mapped_column(String(20), comment="查询风险等级(high/medium/low)")
+    consistency_issues: Mapped[Optional[str]] = mapped_column(JSON, comment="一致性问题列表(JSON)")
+    fact_issues: Mapped[Optional[str]] = mapped_column(JSON, comment="事实核验问题列表(JSON)")
+    temporal_warnings: Mapped[Optional[str]] = mapped_column(JSON, comment="时效性警告列表(JSON)")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True, comment="创建时间")
 
     conversation: Mapped["QaConversation"] = relationship(

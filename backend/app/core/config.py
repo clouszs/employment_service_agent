@@ -3,7 +3,7 @@
 import secrets
 from functools import lru_cache
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     # 应用
     app_name: str = "高校智慧就业服务平台 - AI问答模块"
     app_env: str = "dev"
-    app_debug: bool = True
+    app_debug: bool = False  # 默认关闭，生产环境必须显式设置
     api_prefix: str = "/api/v1"
 
     # 服务监听地址（直接运行 main.py 时生效）
@@ -87,6 +87,32 @@ class Settings(BaseSettings):
     faq_collection: str = "kb_faqs"
     faq_score_threshold: float = 0.75  # 问法相似度达到此值直接返回 FAQ 标准答案
 
+    # ===== Agent 配置 =====
+    agent_enabled: bool = False  # 总开关；V1 默认关闭，灰度时开启
+    agent_max_iterations: int = 10  # 最大迭代步数
+    agent_timeout_seconds: int = 60  # 超时时间(秒)
+    agent_recursion_limit: int = 15  # LangGraph 递归限制（防死循环硬兜底）
+    agent_rate_limit_per_user: int = 10  # 每用户每分钟最大请求数
+    agent_rate_limit_global: int = 100  # 全局每分钟最大请求数
+
+    # ===== 幻觉防御配置 =====
+    high_risk_threshold: float = 0.80  # 高风险阈值
+    medium_risk_threshold: float = 0.65  # 中风险阈值
+    low_risk_threshold: float = 0.40  # 低风险阈值
+
+    # ===== 时效性配置 =====
+    kb_warning_days: int = 30  # 知识库过期告警天数
+    kb_freshness_half_life: int = 180  # 新鲜度半衰期(天)
+
+    # ===== 成本控制配置 =====
+    daily_cost_threshold_usd: float = 10.0  # 日成本阈值
+    monthly_cost_threshold_usd: float = 300.0  # 月成本阈值
+
+    # ===== 语义缓存配置 =====
+    semantic_cache_enabled: bool = True  # 语义缓存总开关
+    semantic_cache_similarity_threshold: float = 0.92  # 语义相似度阈值
+    semantic_cache_ttl: int = 86400  # 缓存过期时间(秒)，默认 24h
+
     @field_validator("jwt_secret")
     @classmethod
     def validate_jwt_secret(cls, v: str, info) -> str:
@@ -112,6 +138,19 @@ class Settings(BaseSettings):
         if info.data.get("app_env") == "production" and v:
             raise ValueError("生产环境不能开启调试模式")
         return v
+
+    @model_validator(mode="after")
+    def validate_critical_secrets(self) -> "Settings":
+        """启动时校验关键密钥，非开发环境必须显式配置。"""
+        if self.app_env != "dev":
+            missing: list[str] = []
+            if not self.dashscope_api_key:
+                missing.append("DASHSCOPE_API_KEY")
+            if not self.jwt_secret or len(self.jwt_secret) < 32:
+                missing.append("JWT_SECRET（至少32位）")
+            if missing:
+                raise ValueError(f"非开发环境必须设置: {', '.join(missing)}")
+        return self
 
     @property
     def database_url(self) -> str:

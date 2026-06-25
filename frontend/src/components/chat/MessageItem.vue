@@ -5,6 +5,9 @@ import type { ChatMessage } from '@/types/chat'
 import { renderMarkdown } from '@/utils/markdown'
 import ReferenceCard from './ReferenceCard.vue'
 import FeedbackBar from './FeedbackBar.vue'
+import ConfidenceBadge from './ConfidenceBadge.vue'
+import TemporalWarning from './TemporalWarning.vue'
+import RefusalMessage from './RefusalMessage.vue'
 
 const props = defineProps<{ message: ChatMessage }>()
 
@@ -14,16 +17,23 @@ const html = computed(() => renderMarkdown(props.message.content))
 // 答案状态标签
 const stateTag = computed(() => {
   const m = props.message
+  if (m.isError) return { text: '系统错误', type: 'danger' as const }
   if (m.blocked) return { text: '已拦截', type: 'warning' as const }
   if (m.isNoAnswer) return { text: '未找到资料', type: 'info' as const }
   if (m.fromFaq) return { text: '标准答复', type: 'success' as const }
   return null
 })
 
-const refs = computed(() => props.message.references || [])
+const refs = computed(() => props.message.references || props.message.citations || [])
 // 已完成的助手消息(有后端ID、非流式中)才显示赞踩
 const showFeedback = computed(
   () => !isUser.value && !!props.message.id && !props.message.streaming,
+)
+const showTemporal = computed(
+  () => !isUser.value && !props.message.isNoAnswer && (props.message.temporalWarnings?.length ?? 0) > 0,
+)
+const showRefusal = computed(
+  () => !isUser.value && !!props.message.isNoAnswer && !props.message.isError,
 )
 </script>
 
@@ -51,6 +61,23 @@ const showFeedback = computed(
 
       <!-- 引用来源：可展开卡片 -->
       <ReferenceCard v-if="refs.length" :references="refs" />
+
+      <!-- 置信度 / 路由 / 时效 / 拒答 -->
+      <div v-if="!isUser" class="assistant-meta">
+        <ConfidenceBadge v-if="message.confidence != null" :confidence="message.confidence" />
+        <el-tag v-if="message.route" size="small" effect="plain" type="info">{{ message.route }}</el-tag>
+        <el-tag v-if="message.queryRiskLevel" size="small" effect="plain" type="warning">
+          {{ message.queryRiskLevel }}
+        </el-tag>
+        <el-tag v-if="message.isLowConfidence" size="small" effect="plain" type="danger">低置信度</el-tag>
+        <TemporalWarning v-if="showTemporal" :warnings="message.temporalWarnings || []" />
+        <RefusalMessage
+          v-if="showRefusal"
+          :is-no-answer="!!message.isNoAnswer"
+          :reason="message.isNoAnswer ? '未在知识库找到匹配答案' : undefined"
+          :route="message.route"
+        />
+      </div>
 
       <!-- 赞踩 -->
       <FeedbackBar v-if="showFeedback" :message-id="message.id!" />
@@ -142,6 +169,13 @@ const showFeedback = computed(
 }
 .md-body :deep(strong) {
   font-weight: 600;
+}
+.assistant-meta {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 .thinking {
   display: flex;

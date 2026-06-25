@@ -15,6 +15,7 @@ engine = create_engine(
     pool_size=settings.db_pool_size,
     pool_recycle=settings.db_pool_recycle,
     pool_pre_ping=True,
+    pool_timeout=30,  # 获取连接超时时间（秒）
     connect_args={
         "charset": settings.db_charset,
     },

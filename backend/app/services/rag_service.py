@@ -25,6 +25,7 @@ from app.models import (
     QaMessageReference,
 )
 from app.services import ops_service
+from app.utils.conversation import resolve_conversation
 
 logger = logging.getLogger(__name__)
 
@@ -124,16 +125,7 @@ def _build_messages(query: str, hits: list[dict]) -> list[dict]:
 
 
 # ==================== 会话与落库辅助 ====================
-def _resolve_conversation(db: Session, user_id: int, conversation_id: Optional[int], question: str) -> QaConversation:
-    if conversation_id:
-        conv = db.get(QaConversation, conversation_id)
-        if conv and conv.status == 1 and conv.user_id == user_id:
-            return conv
-    conv = QaConversation(user_id=user_id, title=question[:30], status=1)
-    db.add(conv)
-    db.commit()
-    db.refresh(conv)
-    return conv
+# resolve_conversation 已移至 app.utils.conversation.resolve_conversation
 
 
 def _save_qa(
@@ -223,7 +215,7 @@ def ask(
     # 敏感词前置过滤
     mod = ops_service.moderate(db, question)
     if mod["action"] == 1:  # 拦截
-        conv = _resolve_conversation(db, user_id, conversation_id, question)
+        conv = resolve_conversation(db, user_id, conversation_id, question)
         latency = int((datetime.now() - start).total_seconds() * 1000)
         answer_msg = _save_qa(db, conv, question, _BLOCKED_TEXT, [], True, latency, user_id, client_ip)
         return {
@@ -241,7 +233,7 @@ def ask(
     faq_hit = faq_match(db, question)
     if faq_hit is not None:
         faq, _score = faq_hit
-        conv = _resolve_conversation(db, user_id, conversation_id, question)
+        conv = resolve_conversation(db, user_id, conversation_id, question)
         faq.hit_count = (faq.hit_count or 0) + 1
         latency = int((datetime.now() - start).total_seconds() * 1000)
         answer_msg = _save_qa(
@@ -258,7 +250,7 @@ def ask(
         }
 
     hits = search(db, question)
-    conv = _resolve_conversation(db, user_id, conversation_id, question)
+    conv = resolve_conversation(db, user_id, conversation_id, question)
 
     if _is_no_answer(hits):
         answer, no_answer, used_hits = _NO_ANSWER_TEXT, True, []
@@ -324,7 +316,7 @@ def ask_stream(
         # 敏感词前置过滤
         mod = ops_service.moderate(db, question)
         if mod["action"] == 1:  # 拦截
-            conv = _resolve_conversation(db, user_id, conversation_id, question)
+            conv = resolve_conversation(db, user_id, conversation_id, question)
             yield {"event": "delta", "data": _BLOCKED_TEXT}
             latency = int((datetime.now() - start).total_seconds() * 1000)
             answer_msg = _save_qa(db, conv, question, _BLOCKED_TEXT, [], True, latency, user_id, client_ip)
@@ -346,7 +338,7 @@ def ask_stream(
         faq_hit = faq_match(db, question)
         if faq_hit is not None:
             faq, _score = faq_hit
-            conv = _resolve_conversation(db, user_id, conversation_id, question)
+            conv = resolve_conversation(db, user_id, conversation_id, question)
             faq.hit_count = (faq.hit_count or 0) + 1
             yield {"event": "delta", "data": faq.answer}
             latency = int((datetime.now() - start).total_seconds() * 1000)
@@ -367,7 +359,7 @@ def ask_stream(
             return
 
         hits = search(db, question)
-        conv = _resolve_conversation(db, user_id, conversation_id, question)
+        conv = resolve_conversation(db, user_id, conversation_id, question)
 
         if _is_no_answer(hits):
             answer, no_answer, used_hits, llm_used = _NO_ANSWER_TEXT, True, [], None

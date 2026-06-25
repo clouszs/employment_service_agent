@@ -1,22 +1,28 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
-import { SwitchButton, User } from '@element-plus/icons-vue'
+import { User, SwitchButton } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { useChatStore } from '@/stores/chat'
+import { useMonitorStore } from '@/stores/monitor'
 import ConversationList from '@/components/chat/ConversationList.vue'
 import MessageList from '@/components/chat/MessageList.vue'
 import ChatInput from '@/components/chat/ChatInput.vue'
+import SearchBox from '@/components/chat/SearchBox.vue'
+import DashboardPanels from '@/components/dashboard/DashboardPanels.vue'
 import ProfileDialog from '@/components/chat/ProfileDialog.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
 const chatStore = useChatStore()
+const monitorStore = useMonitorStore()
 const { user } = storeToRefs(userStore)
-const { messages, loadingMessages, sending } = storeToRefs(chatStore)
+const { messages, sending } = storeToRefs(chatStore)
+const { refreshDashboardCards } = monitorStore
 
 const inputRef = ref<InstanceType<typeof ChatInput>>()
+const showSearch = ref(true)
 
 const examples = [
   '应届毕业生落户需要准备哪些材料？',
@@ -30,9 +36,10 @@ onMounted(async () => {
     try {
       await userStore.loadMe()
     } catch {
-      // 401 由拦截器处理
+      // 401 handled by interceptor
     }
   }
+  refreshDashboardCards()
   inputRef.value?.focus()
 })
 
@@ -42,20 +49,36 @@ function onLogout() {
 }
 
 function onSend(text: string) {
-  chatStore.send(text)
+  chatStore.sendAgent(text)
   inputRef.value?.focus()
 }
 
+function onSearchResult(_result: unknown) {
+  showSearch.value = false
+  setTimeout(() => (showSearch.value = true), 0)
+}
+
 const profileVisible = ref(false)
+
+const isAdminOrEditor = computed(
+  () => (user.value?.roles || []).some((r) => r === 'admin' || r === 'editor'),
+)
 </script>
 
 <template>
   <el-container class="chat-view">
-    <el-aside width="260px" class="aside">
-      <ConversationList />
+    <!-- 左侧面板：会话 + 统计 -->
+    <el-aside width="300px" class="left-panel">
+      <div class="left-inner">
+        <ConversationList />
+        <div v-if="isAdminOrEditor" class="left-dashboard">
+          <DashboardPanels @pick="onSend" />
+        </div>
+      </div>
     </el-aside>
 
-    <el-container>
+    <!-- 中央面板：搜索 + 对话 -->
+    <el-container class="center-panel">
       <el-header class="header">
         <span class="header-title">高校智慧就业服务平台</span>
         <div class="header-right">
@@ -67,26 +90,52 @@ const profileVisible = ref(false)
       </el-header>
 
       <el-main class="main">
-        <div v-if="messages.length === 0" class="welcome">
-          <div class="welcome-inner">
-            <h2 class="welcome-title">👋 你好，我是智慧就业助手</h2>
-            <p class="welcome-sub">基于高校就业知识库，为你解答政策、流程、招聘等问题</p>
-            <div class="examples">
-              <div
-                v-for="(q, i) in examples"
-                :key="i"
-                class="example-item"
-                @click="onSend(q)"
-              >
-                {{ q }}
+        <div class="chat-scroll">
+          <template v-if="messages.length === 0">
+            <SearchBox
+              v-if="showSearch"
+              :sending="sending"
+              @send="onSend"
+              @searching="onSearchResult"
+            />
+            <div class="welcome">
+              <div class="welcome-inner">
+                <h2 class="welcome-title">👋 你好，我是智慧就业助手</h2>
+                <p class="welcome-sub">基于高校就业知识库，为你解答政策、流程、招聘等问题</p>
+                <div class="examples">
+                  <div
+                    v-for="(q, i) in examples"
+                    :key="i"
+                    class="example-item"
+                    @click="onSend(q)"
+                  >
+                    {{ q }}
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
+          </template>
+          <template v-else>
+            <MessageList :messages="messages" class="msg-area" />
+            <ChatInput ref="inputRef" :sending="sending" @send="onSend" />
+          </template>
         </div>
-        <MessageList v-else v-loading="loadingMessages" :messages="messages" class="msg-area" />
-        <ChatInput ref="inputRef" :sending="sending" @send="onSend" />
       </el-main>
     </el-container>
+
+    <!-- 右侧面板：热门问题 + 监控摘要 -->
+    <el-aside width="340px" class="right-panel" v-if="isAdminOrEditor">
+      <div class="right-inner">
+        <el-card class="right-card" shadow="never">
+          <template #header>
+            <div class="right-card-head">
+              <span class="right-card-title">热门问题</span>
+            </div>
+          </template>
+          <HotQuestions @pick="onSend" />
+        </el-card>
+      </div>
+    </el-aside>
 
     <ProfileDialog v-model="profileVisible" />
   </el-container>
@@ -95,37 +144,57 @@ const profileVisible = ref(false)
 <style scoped>
 .chat-view {
   height: 100%;
+  background: linear-gradient(135deg, #0a0e27 0%, #1a1f4e 60%, #0b1026 100%);
+  color: #e0f2fe;
 }
-.aside {
-  background: #fff;
-  border-right: 1px solid #e5e7eb;
+.left-panel {
+  background: rgba(15, 23, 42, 0.55);
+  border-right: 1px solid rgba(56, 189, 248, 0.18);
+}
+.left-inner {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.left-dashboard {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+.center-panel {
+  background: transparent;
 }
 .header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: #fff;
-  border-bottom: 1px solid #e5e7eb;
+  background: rgba(15, 23, 42, 0.4);
+  border-bottom: 1px solid rgba(56, 189, 248, 0.18);
+  color: #e0f2fe;
 }
 .header-title {
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: 0.5px;
 }
 .header-right {
   display: flex;
   align-items: center;
   gap: 12px;
 }
-.username {
-  font-size: 14px;
-  color: #6b7280;
-}
 .main {
-  background: #f5f7fa;
   padding: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+.chat-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
 }
 .msg-area {
   flex: 1;
@@ -140,15 +209,15 @@ const profileVisible = ref(false)
 }
 .welcome-inner {
   text-align: center;
-  max-width: 640px;
+  max-width: 680px;
 }
 .welcome-title {
   font-size: 24px;
-  color: #1f2937;
+  color: #e0f2fe;
   margin: 0 0 8px;
 }
 .welcome-sub {
-  color: #6b7280;
+  color: #a9c2e0;
   margin: 0 0 28px;
 }
 .examples {
@@ -158,18 +227,45 @@ const profileVisible = ref(false)
 }
 .example-item {
   padding: 14px 16px;
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.25);
   border-radius: 10px;
   font-size: 14px;
-  color: #374151;
+  color: #e0f2fe;
   cursor: pointer;
   text-align: left;
   transition: all 0.15s;
 }
 .example-item:hover {
-  border-color: #2563eb;
-  color: #2563eb;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.1);
+  border-color: #38bdf8;
+  color: #38bdf8;
+  box-shadow: 0 0 24px rgba(56, 189, 248, 0.15);
+}
+.right-panel {
+  background: rgba(15, 23, 42, 0.55);
+  border-left: 1px solid rgba(56, 189, 248, 0.18);
+}
+.right-inner {
+  height: 100%;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.right-card {
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(16px);
+}
+.right-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.right-card-title {
+  font-weight: 600;
+  color: #0f172a;
 }
 </style>

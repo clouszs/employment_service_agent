@@ -1,15 +1,21 @@
-"""问答与会话业务逻辑：会话 / 消息 / 反馈（不含 RAG 生成）。"""
+"""问答与会话业务逻辑：会话 / 消息 / 反馈 / Agent 问答集成。"""
 
-from datetime import date, timedelta
+from __future__ import annotations
+
+import logging
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
-from app.models import QaConversation, QaFeedback, QaMessage, QaMessageReference, SysUser
+from app.agent.graph import get_agent_graph
+from app.models import QaConversation, QaFeedback, QaMessage, QaMessageReference, OpQueryLog, SysUser
+from app.utils.conversation import resolve_conversation
+
+logger = logging.getLogger(__name__)
 
 
-# ==================== 会话 ====================
 def list_conversations(
     db: Session, user_id: int, offset: int, limit: int
 ) -> tuple[list[QaConversation], int]:
@@ -227,3 +233,193 @@ def feedback_stats(db: Session) -> dict:
         },
         "trend": trend,
     }
+
+
+# ==================== Agent 问答集成 ====================
+
+
+def agent_chat(
+    db: Session,
+    user_id: int,
+    query: str,
+    conversation_id: Optional[int] = None,
+    client_ip: Optional[str] = None,
+) -> dict:
+    """Agent 问答入口（V1 简化版）。
+
+    流程：
+    1. 创建/获取会话
+    2. 执行 Agent 工作流
+    3. 保存用户消息 + AI 回答
+    4. 保存引用
+    5. 记录查询日志
+
+    Args:
+        db: 数据库会话
+        user_id: 用户 ID
+        query: 用户问题
+        conversation_id: 会话 ID（可选）
+        client_ip: 客户端 IP（可选）
+
+    Returns:
+        结果字典（包含 conversation_id / message_id / response / citations 等）
+    """
+    from app.core.config import settings
+
+    start = datetime.now()
+
+    # 1. 创建/获取会话
+    conv = resolve_conversation(db, user_id, conversation_id, query)
+
+    # 2. 执行 Agent 工作流
+    try:
+        workflow = get_agent_graph().build()
+        app = workflow.compile()
+
+        request_id = str(__import__("uuid").uuid4())
+        state: dict = {
+            "current_query": query,
+            "conversation_id": conv.id,
+            "user_id": user_id,
+            "request_id": request_id,
+            "created_at": datetime.now().isoformat(),
+            "retry_attempt": 0,
+            "tool_call_count": 0,
+            "regenerate_count": 0,
+            "forced_exit": False,
+            "is_low_confidence": False,
+            "skipped_consistency_check": False,
+            "is_error": False,
+            "should_refuse": False,
+            "refusal_reason": "",
+            "content_safe": True,
+            "search_results": [],
+            "citations": [],
+            "confidence": 0.0,
+            "query_risk_level": "medium",
+            "route": "",
+            "response": "",
+            "consistency_issues": [],
+            "fact_issues": [],
+            "temporal_warnings": [],
+            "history": [],
+            "reasoning_chain": [],
+            "error": {},
+            "partial_effects": [],
+            "last_search_query": "",
+            "llm_tokens_in": 0,
+            "llm_tokens_out": 0,
+            "warnings": [],
+        }
+
+        config = {"configurable": {"thread_id": str(conv.id)}}
+        result = app.invoke(state, config)
+
+        response = result.get("response", "")
+        is_no_answer = result.get("should_refuse", False)
+        route = result.get("route", "")
+        confidence = result.get("confidence", 0.0)
+        citations = result.get("citations", [])
+        consistency_issues = result.get("consistency_issues", [])
+        fact_issues = result.get("fact_issues", [])
+        temporal_warnings = result.get("temporal_warnings", [])
+        warnings = result.get("warnings", [])
+        query_risk_level = result.get("query_risk_level", "medium")
+        is_low_confidence = result.get("is_low_confidence", False)
+        llm_tokens_in = result.get("llm_tokens_in", 0)
+        llm_tokens_out = result.get("llm_tokens_out", 0)
+
+    except Exception as e:
+        logger.error("Agent 工作流执行失败: %s", str(e))
+        response = "抱歉，系统处理您的请求时遇到了问题，请稍后再试或联系就业中心老师。"
+        is_no_answer = True
+        route = "error"
+        confidence = 0.0
+        citations = []
+        consistency_issues = []
+        fact_issues = []
+        temporal_warnings = []
+        warnings = []
+        query_risk_level = "medium"
+        is_low_confidence = False
+        llm_tokens_in = 0
+        llm_tokens_out = 0
+
+    # 3. 保存用户消息 + AI 回答
+    latency = int((datetime.now() - start).total_seconds() * 1000)
+
+    answer_msg = QaMessage(
+        conversation_id=conv.id,
+        role=2,
+        content=response,
+        answer_type=4 if is_no_answer else 1,
+        is_no_answer=1 if is_no_answer else 0,
+        llm_model="agent-workflow",
+        latency_ms=latency,
+        confidence=confidence,
+        query_risk_level=query_risk_level,
+        consistency_issues=str(consistency_issues),
+        fact_issues=str(fact_issues),
+        temporal_warnings=str(temporal_warnings),
+        prompt_tokens=llm_tokens_in,
+        completion_tokens=llm_tokens_out,
+    )
+    db.add(answer_msg)
+    db.add(QaMessage(conversation_id=conv.id, role=1, content=query))
+    db.commit()
+    db.refresh(answer_msg)
+
+    # 4. 保存引用
+    if not is_no_answer:
+        for rank, cit in enumerate(citations, start=1):
+            db.add(
+                QaMessageReference(
+                    message_id=answer_msg.id,
+                    document_id=cit.get("document_id"),
+                    chunk_id=cit.get("chunk_id"),
+                    score=cit.get("score"),
+                    rank_no=rank,
+                    snippet=(cit.get("snippet") or "")[:300],
+                )
+            )
+
+    # 5. 记录查询日志
+    db.add(
+        OpQueryLog(
+            user_id=user_id,
+            conversation_id=conv.id,
+            message_id=answer_msg.id,
+            question=query[:1024],
+            answer_brief=response[:2048],
+            hit_doc_count=len(citations),
+            is_no_answer=1 if is_no_answer else 0,
+            latency_ms=latency,
+            client_ip=client_ip,
+            channel="web",
+        )
+    )
+    db.commit()
+
+    return {
+        "conversation_id": conv.id,
+        "message_id": answer_msg.id,
+        "response": response,
+        "is_no_answer": is_no_answer,
+        "blocked": False,
+        "from_faq": False,
+        "references": citations,
+        "citations": citations,
+        "confidence": confidence,
+        "route": route,
+        "query_risk_level": query_risk_level,
+        "is_low_confidence": is_low_confidence,
+        "is_error": False,
+        "consistency_issues": consistency_issues,
+        "fact_issues": fact_issues,
+        "temporal_warnings": temporal_warnings,
+        "warnings": warnings,
+        "request_id": request_id,
+        "llm_tokens_in": llm_tokens_in,
+        "llm_tokens_out": llm_tokens_out,
+    }
+

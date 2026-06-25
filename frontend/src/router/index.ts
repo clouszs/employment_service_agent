@@ -85,6 +85,12 @@ const router = createRouter({
           component: () => import('@/views/admin/SensitiveWordsView.vue'),
           meta: { adminOnly: true },
         },
+        {
+          path: 'monitor',
+          name: 'admin-monitor',
+          component: () => import('@/views/admin/MonitorView.vue'),
+          meta: { adminOnly: false },
+        },
       ],
     },
     { path: '/', redirect: '/chat' },

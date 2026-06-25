@@ -7,22 +7,22 @@
 文档：http://127.0.0.1:8000/docs
 """
 
+import logging
 import os
 import sys
-from dotenv import load_dotenv, find_dotenv
-load_dotenv(find_dotenv())
-# 让"直接运行本文件"也能找到 app 包：把 backend 目录(本文件上两级)加入 sys.path
-_BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _BACKEND_DIR not in sys.path:
-    sys.path.insert(0, _BACKEND_DIR)
+from contextlib import asynccontextmanager
+from pathlib import Path
 
+from dotenv import find_dotenv, load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.langsmith_setup import setup_langsmith
+from app.core.logging_config import setup_logging
 from app.core.response import register_exception_handlers
 from app.routers import (
+    agent,
     auth,
     categories,
     conversations,
@@ -32,9 +32,12 @@ from app.routers import (
     feedback,
     health,
     index_tasks,
+    kb_health,
+    llm_cost,
     messages,
     qa,
     query_logs,
+    refusal,
     roles,
     sensitive_words,
     stats,
@@ -43,26 +46,77 @@ from app.routers import (
     users,
 )
 
+load_dotenv(find_dotenv())
+
+# 让"直接运行本文件"也能找到 app 包：把 backend 目录(本文件上两级)加入 sys.path
+_BACKEND_DIR = Path(__file__).resolve().parent.parent
+if str(_BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(_BACKEND_DIR))
+
+logger = logging.getLogger(__name__)
+
+
+# ==================== 生命周期管理 ====================
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理（FastAPI >= 0.93 推荐模式）。"""
+    # 启动时初始化
+    setup_logging()
+    setup_langsmith()
+    from app.monitor.scheduler import setup_scheduler
+
+    setup_scheduler()
+    logger.info("应用启动完成，环境=%s，debug=%s", settings.app_env, settings.app_debug)
+    yield
+    # 关闭时优雅释放资源
+    logger.info("正在关闭应用，释放资源...")
+    try:
+        from app.core.database import engine
+
+        engine.dispose()
+        logger.info("数据库连接池已释放")
+    except Exception as e:
+        logger.warning("释放数据库连接池失败: %s", e)
+    from app.monitor.scheduler import shutdown_scheduler
+
+    shutdown_scheduler()
+    logger.info("应用已关闭")
+
+
+# ==================== FastAPI 实例 ====================
+
+
 app = FastAPI(
     title=settings.app_name,
     debug=settings.app_debug,
     description="高校智慧就业服务平台 - AI问答模块后端 API",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
-# LangSmith 全局追踪初始化（从 settings 导出 LANGSMITH_*/LANGCHAIN_* 环境变量）
-setup_langsmith()
 
-# CORS（开发期放开，生产应收紧）
-# 注意：allow_credentials=True 时，allow_origins 不能用 "*"，必须指定具体域名
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
+# CORS：根据环境变量动态配置
+# 开发环境允许 localhost；生产环境只放前端域名（通过 APP_ENV 区分）
+if settings.app_env == "production":
+    _cors_origins = [
+        # 生产环境：按实际部署的前端域名添加
+        # 示例："https://career.example.com",
+    ]
+else:
+    _cors_origins = [
         "http://localhost:5173",  # Vite 开发服务器
         "http://localhost:3000",  # 备用前端端口
         "http://127.0.0.1:5173",
         "http://127.0.0.1:3000",
-    ],
+        "http://127.0.0.1:8000",  # Swagger UI / 自测
+        "http://localhost:8000",  # 本地直连
+    ]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -83,6 +137,12 @@ app.include_router(faqs.router, prefix=settings.api_prefix)
 app.include_router(synonyms.router, prefix=settings.api_prefix)
 # P3 检索问答
 app.include_router(qa.router, prefix=settings.api_prefix)
+# Agent 对话（渐进式迁移，默认 agent_enabled=False）
+app.include_router(agent.router, prefix=settings.api_prefix)
+# P5 监控告警
+app.include_router(kb_health.router, prefix=settings.api_prefix)
+app.include_router(llm_cost.router, prefix=settings.api_prefix)
+app.include_router(refusal.router, prefix=settings.api_prefix)
 # P4 会话与反馈
 app.include_router(conversations.router, prefix=settings.api_prefix)
 app.include_router(messages.router, prefix=settings.api_prefix)
@@ -98,6 +158,9 @@ app.include_router(unanswered.router, prefix=settings.api_prefix)
 @app.get("/")
 def root() -> dict:
     return {"message": f"{settings.app_name} API 运行中，文档见 /docs"}
+
+
+# ==================== 直接运行入口 ====================
 
 
 if __name__ == "__main__":

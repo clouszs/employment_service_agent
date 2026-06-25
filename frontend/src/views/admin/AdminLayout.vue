@@ -17,6 +17,7 @@ import {
   Key,
   SwitchButton,
   ChatLineRound,
+  Monitor,
 } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import ParticlesBg from '@/components/common/ParticlesBg.vue'
@@ -41,6 +42,7 @@ const TITLES: Record<string, string> = {
   'admin-users': '用户管理',
   'admin-roles': '角色管理',
   'admin-sensitive': '敏感词管理',
+  'admin-monitor': '监控中心',
 }
 const pageTitle = computed(() => TITLES[String(route.name)] || '管理后台')
 
@@ -115,6 +117,12 @@ function onLogout() {
             </el-menu-item>
             <el-menu-item index="/admin/eval">
               <el-icon><Histogram /></el-icon><span>评测集</span>
+            </el-menu-item>
+          </el-menu-item-group>
+
+          <el-menu-item-group title="监控">
+            <el-menu-item index="/admin/monitor">
+              <el-icon><Monitor /></el-icon><span>监控中心</span>
             </el-menu-item>
           </el-menu-item-group>
 

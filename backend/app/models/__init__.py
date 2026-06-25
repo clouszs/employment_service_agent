@@ -5,6 +5,7 @@
   knowledge —— 知识库     (kb_*)
   qa        —— 问答与会话 (qa_*)
   ops       —— 运营·安全·质量 (op_*)
+  monitor   —— 监控告警   (monitor_* / kb_*_log)
 """
 
 from app.models.base import Base
@@ -15,6 +16,14 @@ from app.models.knowledge import (
     KbFaq,
     KbIndexTask,
     KbSynonym,
+)
+from app.models.monitor import (
+    AgentRefusalLog,
+    CitationQualityLog,
+    ConsistencyIssueLog,
+    FactVerificationLog,
+    KbHealthLog,
+    LlmCostLog,
 )
 from app.models.ops import OpEvalCase, OpQueryLog, OpSensitiveWord, OpUnansweredQuestion
 from app.models.qa import QaConversation, QaFeedback, QaMessage, QaMessageReference
@@ -35,12 +44,19 @@ __all__ = [
     "KbIndexTask",
     # qa
     "QaConversation",
+    "QaFeedback",
     "QaMessage",
     "QaMessageReference",
-    "QaFeedback",
     # ops
     "OpQueryLog",
     "OpSensitiveWord",
     "OpEvalCase",
     "OpUnansweredQuestion",
+    # monitor
+    "KbHealthLog",
+    "LlmCostLog",
+    "AgentRefusalLog",
+    "CitationQualityLog",
+    "ConsistencyIssueLog",
+    "FactVerificationLog",
 ]
