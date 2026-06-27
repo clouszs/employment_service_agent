@@ -28,6 +28,9 @@ from app.models.monitor import (
 from app.models.ops import OpEvalCase, OpQueryLog, OpSensitiveWord, OpUnansweredQuestion
 from app.models.qa import QaConversation, QaFeedback, QaMessage, QaMessageReference
 from app.models.user import SysRole, SysUser, SysUserRole
+from app.models.app_config import AppConfig
+from app.models.user_favorite import UserFavorite
+from app.models.announcement import Announcement
 
 __all__ = [
     "Base",
@@ -59,4 +62,7 @@ __all__ = [
     "CitationQualityLog",
     "ConsistencyIssueLog",
     "FactVerificationLog",
+  "AppConfig",
+  "UserFavorite",
+  "Announcement",
 ]

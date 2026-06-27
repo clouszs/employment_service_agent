@@ -85,6 +85,6 @@ def ask_agent(
         return success(result)
 
     result = qa_service.agent_chat(
-        db, current.id, payload.question, conversation_id=payload.conversation_id, client_ip=client_ip
+        db, current.id, payload.question, conversation_id=payload.conversation_id, client_ip=client_ip, history=payload.history,
     )
     return success(result)

@@ -23,6 +23,8 @@ from app.core.logging_config import setup_logging
 from app.core.response import register_exception_handlers
 from app.routers import (
     agent,
+    app_config,
+    announcements,
     auth,
     categories,
     conversations,
@@ -43,6 +45,7 @@ from app.routers import (
     stats,
     synonyms,
     unanswered,
+    user_favorite,
     users,
 )
 
@@ -153,6 +156,10 @@ app.include_router(stats.router, prefix=settings.api_prefix)
 app.include_router(eval_cases.router, prefix=settings.api_prefix)
 app.include_router(feedback.router, prefix=settings.api_prefix)
 app.include_router(unanswered.router, prefix=settings.api_prefix)
+# P2 系统配置/收藏/公告
+app.include_router(app_config.router, prefix=settings.api_prefix)
+app.include_router(user_favorite.router, prefix=settings.api_prefix)
+app.include_router(announcements.router, prefix=settings.api_prefix)
 
 
 @app.get("/")

@@ -17,6 +17,12 @@ const router = createRouter({
       component: () => import('@/views/ChatView.vue'),
     },
     {
+      path: '/chat/favorites',
+      name: 'chat-favorites',
+      component: () => import('@/views/chat/FavoritesView.vue'),
+      meta: { requireAuth: true },
+    },
+    {
       path: '/admin',
       component: () => import('@/views/admin/AdminLayout.vue'),
       meta: { requireAdmin: true },
@@ -91,6 +97,21 @@ const router = createRouter({
           component: () => import('@/views/admin/MonitorView.vue'),
           meta: { adminOnly: false },
         },
+        {
+          path: 'stats',
+          name: 'admin-stats',
+          component: () => import('@/views/admin/StatsView.vue'),
+        },
+        {
+          path: 'students',
+          name: 'admin-students',
+          component: () => import('@/views/admin/StudentsView.vue'),
+        },
+        {
+          path: 'announcements',
+          name: 'admin-announcements',
+          component: () => import('@/views/admin/AnnouncementsView.vue'),
+        },
       ],
     },
     { path: '/', redirect: '/chat' },
@@ -107,7 +128,6 @@ router.beforeEach(async (to) => {
   if (to.path === '/login' && hasToken) {
     return { path: '/chat' }
   }
-  // 进入管理后台需 admin/editor 角色
   if (to.meta.requireAdmin) {
     const userStore = useUserStore()
     if (!userStore.user) {
@@ -120,7 +140,6 @@ router.beforeEach(async (to) => {
     if (!userStore.hasAdminAccess) {
       return { path: '/chat' } // 无权限退回问答端
     }
-    // 部分页面仅 admin 可访问
     if (to.meta.adminOnly && !userStore.isAdmin) {
       return { path: '/admin/dashboard' }
     }

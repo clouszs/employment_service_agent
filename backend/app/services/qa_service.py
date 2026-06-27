@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import logging
+import time
 from datetime import date, datetime, timedelta
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from typing import Optional
 
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.agent.graph import get_agent_graph
+from app.core.config import settings
 from app.models import QaConversation, QaFeedback, QaMessage, QaMessageReference, OpQueryLog, SysUser
 from app.utils.conversation import resolve_conversation
 
@@ -244,6 +247,7 @@ def agent_chat(
     query: str,
     conversation_id: Optional[int] = None,
     client_ip: Optional[str] = None,
+    history: Optional[list[dict]] = None,
 ) -> dict:
     """Agent 问答入口（V1 简化版）。
 
@@ -302,7 +306,7 @@ def agent_chat(
             "consistency_issues": [],
             "fact_issues": [],
             "temporal_warnings": [],
-            "history": [],
+            "history": history or [],
             "reasoning_chain": [],
             "error": {},
             "partial_effects": [],
@@ -313,7 +317,36 @@ def agent_chat(
         }
 
         config = {"configurable": {"thread_id": str(conv.id)}}
-        result = app.invoke(state, config)
+
+        # 超时保护：使用线程池执行工作流，超时后返回降级响应
+        timeout_seconds = settings.agent_timeout_seconds
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(app.invoke, state, config)
+            try:
+                result = future.result(timeout=timeout_seconds)
+            except TimeoutError:
+                logger.error(
+                    "Agent 工作流超时：user=%d conv=%d timeout=%ds",
+                    user_id,
+                    conv.id,
+                    timeout_seconds,
+                )
+                result = {
+                    "response": "抱歉，系统处理您的请求时遇到了超时，请稍后再试或联系就业中心老师。",
+                    "confidence": 0.0,
+                    "should_refuse": True,
+                    "route": "error",
+                    "citations": [],
+                    "consistency_issues": [],
+                    "fact_issues": [],
+                    "temporal_warnings": [],
+                    "warnings": ["系统响应超时，请稍后再试。"],
+                    "query_risk_level": "medium",
+                    "is_low_confidence": True,
+                    "is_error": True,
+                    "llm_tokens_in": 0,
+                    "llm_tokens_out": 0,
+                }
 
         response = result.get("response", "")
         is_no_answer = result.get("should_refuse", False)

@@ -23,17 +23,31 @@ export function search(query: string, topK = 5): Promise<SearchHit[]> {
 }
 
 // ---------------- Agent 问答（P0 主流程） ----------------
+export interface AskAgentPayload {
+  question: string
+  conversation_id?: number | null
+  history?: Array<{ role: 'user' | 'assistant'; content: string }>
+}
+
 export function askAgent(
-  query: string,
+  question: string,
   conversationId?: number | null,
+  history?: Array<{ role: 'user' | 'assistant'; content: string }>,
+  signal?: AbortSignal,
 ): Promise<AgentAskResult> {
-  return request.post('/ask/agent', {
-    query,
-    conversation_id: conversationId ?? undefined,
-  })
+  const payload: AskAgentPayload = { question, conversation_id: conversationId ?? undefined }
+  if (history && history.length) {
+    payload.history = history
+  }
+  return request.post('/ask/agent', payload, { signal })
 }
 
 // ---------------- 消息引用 ----------------
 export function getMessageReferences(messageId: number) {
-  return request.get(`/messages/${messageId}/references`)
+  return request.get('/messages/' + messageId + '/references')
+}
+
+// ---------------- 消息详情 ----------------
+export function getMessageDetail(messageId: number) {
+  return request.get('/messages/' + messageId)
 }
