@@ -1,0 +1,120 @@
+/* ==========================================
+   Smart Career Platform — Brand Design Tokens
+   深蓝科技风 · 高校智慧就业服务平台
+   ========================================== */
+
+:root {
+  /* ---- Primary Palette ---- */
+  --color-primary:        #00d4ff;
+  --color-primary-light:   #33ddff;
+  --color-primary-dark:    #0099cc;
+  --color-primary-bg:      rgba(0, 212, 255, 0.08);
+  --color-primary-bg-hover:rgba(0, 212, 255, 0.14);
+
+  /* ---- Neutral Scale (dark mode base) ---- */
+  --color-bg-body:         #0a0e1a;
+  --color-bg-surface:      #111827;
+  --color-bg-elevated:      #1a2236;
+  --color-bg-overlay:       rgba(0, 0, 0, 0.6);
+  --color-bg-card:          #111827;
+  --color-bg-card-hover:    #162032;
+
+  --color-text-primary:    #e8ecf4;
+  --color-text-secondary:  #8892a4;
+  --color-text-tertiary:    #5a6478;
+  --color-text-inverse:    #0a0e1a;
+
+  --color-border:          rgba(255, 255, 255, 0.08);
+  --color-border-hover:    rgba(255, 255, 255, 0.16);
+
+  /* ---- State Colors ---- */
+  --state-success:  #10b981;
+  --state-warning: #f59e0b;
+  --state-error:   #ef4444;
+  --state-info:    #3b82f6;
+
+  /* ---- Gradient Accents ---- */
+  --gradient-hero:     linear-gradient(135deg, #00d4ff 0%, #0066ff 50%, #7c3aed 100%);
+  --gradient-card:     linear-gradient(135deg, rgba(0, 212, 255, 0.1) 0%, rgba(0, 102, 255, 0.05) 100%);
+  --gradient-glow:     radial-gradient(ellipse at center, rgba(0, 212, 255, 0.15) 0%, transparent 70%);
+  --gradient-btn:      linear-gradient(135deg, #00d4ff 0%, #0088cc 100%);
+  --gradient-sidebar:  linear-gradient(180deg, #0a0e1a 0%, #111827 100%);
+
+  /* ---- Typography ---- */
+  --font-display:    'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-body:        'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-mono:        'JetBrains Mono', 'Fira Code', monospace;
+
+  --text-xs:    0.75rem;     /* 12px */
+  --text-sm:    0.875rem;    /* 14px */
+  --text-base:  1rem;        /* 16px */
+  --text-lg:    1.125rem;    /* 18px */
+  --text-xl:    1.25rem;     /* 20px */
+  --text-2xl:   1.5rem;      /* 24px */
+  --text-3xl:   1.875rem;    /* 30px */
+  --text-4xl:   2.25rem;     /* 36px */
+  --text-5xl:   3rem;        /* 48px */
+
+  --leading-tight:  1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed:1.625;
+
+  /* ---- Spacing Scale ---- */
+  --space-1:  0.25rem;   /* 4px */
+  --space-2:  0.5rem;    /* 8px */
+  --space-3:  0.75rem;   /* 12px */
+  --space-4:  1rem;      /* 16px */
+  --space-5:  1.25rem;   /* 20px */
+  --space-6:  1.5rem;    /* 24px */
+  --space-8:  2rem;      /* 32px */
+  --space-10: 2.5rem;    /* 40px */
+  --space-12: 3rem;      /* 48px */
+  --space-16: 4rem;      /* 64px */
+  --space-20: 5rem;      /* 80px */
+
+  /* ---- Border Radius ---- */
+  --radius-sm:   4px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-xl:   16px;
+  --radius-full: 9999px;
+
+  /* ---- Shadow (static max alpha 0.05) ---- */
+  --shadow-sm:   0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md:   0 4px 12px rgba(0, 0, 0, 0.05);
+  --shadow-lg:   0 12px 32px rgba(0, 0, 0, 0.05);
+
+  /* ---- Floating layer shadows (allowed deeper) ---- */
+  --shadow-float: 0 16px 48px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 212, 255, 0.1);
+  --shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(0, 212, 255, 0.15);
+
+  /* ---- Animation ---- */
+  --transition-fast: 150ms ease;
+  --transition-base: 250ms ease;
+  --transition-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ---- Glow Effect ---- */
+  --glow-primary: 0 0 20px rgba(0, 212, 255, 0.2);
+  --glow-strong:  0 0 40px rgba(0, 212, 255, 0.3);
+}
+
+/* ---- Dark Mode Light Variant (for optional toggle) ---- */
+html.light {
+  --color-bg-body:         #f0f4f8;
+  --color-bg-surface:      #ffffff;
+  --color-bg-elevated:      #ffffff;
+  --color-bg-overlay:       rgba(0, 0, 0, 0.4);
+  --color-bg-card:          #ffffff;
+  --color-bg-card-hover:    #f8fafc;
+  --color-text-primary:    #0f172a;
+  --color-text-secondary:  #64748b;
+  --color-text-tertiary:    #94a3b8;
+  --color-border:          rgba(0, 0, 0, 0.08);
+  --color-border-hover:    rgba(0, 0, 0, 0.16);
+  --shadow-sm:   0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md:   0 4px 12px rgba(0, 0, 0, 0.06);
+  --shadow-lg:   0 12px 32px rgba(0, 0, 0, 0.08);
+  --shadow-float: 0 16px 48px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 212, 255, 0.2);
+  --shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(0, 212, 255, 0.25);
+  --gradient-sidebar:  linear-gradient(180deg, #ffffff 0%, #f0f4f8 100%);
+}

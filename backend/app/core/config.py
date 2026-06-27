@@ -95,6 +95,34 @@ class Settings(BaseSettings):
     agent_rate_limit_per_user: int = 10  # 每用户每分钟最大请求数
     agent_rate_limit_global: int = 100  # 全局每分钟最大请求数
 
+    # ===== 外部检索兜底配置 =====
+    agent_web_search_enabled: bool = False  # 本地无结果时是否 fallback 到外部检索
+    newsapi_key: str = Field(default="", description="NewsAPI Key（备用，优先使用 Bing MCP）")
+    newsapi_page_size: int = 5  # 外部检索返回条数
+
+    # ===== Bing 搜索 + Fetch 抓取（MCP） =====
+    bing_search_url: str = Field(
+        default="https://mcp.api-inference.modelscope.net/66305244dc8b44/mcp",
+        description="Bing 搜索 MCP 服务地址",
+    )
+    fetch_url: str = Field(
+        default="https://mcp.api-inference.modelscope.net/a5c9d3d0ca894d/mcp",
+        description="网页抓取 MCP 服务地址",
+    )
+    bing_search_timeout: float = 15.0  # Bing 搜索超时（秒）
+    fetch_timeout: float = 20.0  # 网页抓取超时（秒）
+    fetch_max_length: int = 8000  # 抓取内容最大长度（字符）
+
+    # ===== 站点白名单 =====
+    government_sites: str = Field(
+        default=".gov.cn,.edu.cn,12333.gov.cn,chsi.com.cn,mohrss.gov.cn",
+        description="政务站点白名单（逗号分隔）",
+    )
+    job_sites: str = Field(
+        default="lagou.com,zhipin.com,liepin.com,nowcoder.com,51job.com",
+        description="招聘站点白名单（逗号分隔）",
+    )
+
     # ===== 幻觉防御配置 =====
     high_risk_threshold: float = 0.80  # 高风险阈值
     medium_risk_threshold: float = 0.65  # 中风险阈值

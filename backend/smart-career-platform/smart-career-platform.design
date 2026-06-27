@@ -1,0 +1,127 @@
+{
+  "data": [
+    {
+      "id": "page-login",
+      "title": "登录页",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1719474000000,
+      "canvasData": {
+        "x": 0,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/login.html",
+        "interactions": [
+          {
+            "domId": "btn-login",
+            "targetPageId": "page-chat",
+            "transitionLabel": "登录成功"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-chat",
+      "title": "AI 智能对话",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1719474000000,
+      "canvasData": {
+        "x": 620,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/chat.html",
+        "interactions": [
+          {
+            "domId": "nav-conversations",
+            "targetPageId": "page-conversations",
+            "hideEdge": true,
+            "transitionLabel": "查看会话历史"
+          },
+          {
+            "domId": "btn-new-chat",
+            "targetPageId": "page-chat",
+            "hideEdge": true,
+            "transitionLabel": "新建对话"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-conversations",
+      "title": "会话历史",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1719474000000,
+      "canvasData": {
+        "x": 0,
+        "y": 377,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/conversations.html",
+        "interactions": [
+          {
+            "domId": "btn-new-chat",
+            "targetPageId": "page-chat",
+            "transitionLabel": "新建对话"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-admin-dashboard",
+      "title": "管理后台总览",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1719474000000,
+      "canvasData": {
+        "x": 820,
+        "y": 917,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/admin-dashboard.html",
+        "interactions": [
+          {
+            "domId": "nav-faq",
+            "targetPageId": "page-admin-faq",
+            "transitionLabel": "FAQ管理"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-admin-faq",
+      "title": "FAQ 管理",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1719474000000,
+      "canvasData": {
+        "x": 200,
+        "y": 917,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/admin-faq.html",
+        "interactions": [
+          {
+            "domId": "nav-dashboard",
+            "targetPageId": "page-admin-dashboard",
+            "transitionLabel": "返回总览"
+          }
+        ]
+      }
+    }
+  ],
+  "config": {
+    "autoLayout": true,
+    "deviceType": "desktop",
+    "projectName": "高校智慧就业服务平台",
+    "designLibrary": null
+  }
+}

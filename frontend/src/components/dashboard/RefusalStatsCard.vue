@@ -48,9 +48,11 @@ const today = computed(() => data.value?.today_refusals ?? 0)
 <style scoped>
 .refusal-card {
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(14px);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border-solid);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: var(--text-primary);
 }
 .card-head {
   display: flex;
@@ -59,6 +61,7 @@ const today = computed(() => data.value?.today_refusals ?? 0)
 }
 .card-title {
   font-weight: 600;
+  color: var(--accent-cyan);
 }
 .refusal-body {
   margin-top: 6px;
@@ -72,16 +75,16 @@ const today = computed(() => data.value?.today_refusals ?? 0)
 .refusal-total {
   font-size: 24px;
   font-weight: 700;
-  color: #0f172a;
+  color: #ffffff;
 }
 .refusal-sub {
   font-size: 12px;
-  color: #475569;
+  color: var(--text-muted);
 }
 .refusal-today {
   margin-left: auto;
   font-size: 12px;
-  color: #f59e0b;
+  color: #fbbf24;
 }
 .risk-bars {
   display: flex;
@@ -96,12 +99,12 @@ const today = computed(() => data.value?.today_refusals ?? 0)
 }
 .risk-label {
   font-size: 12px;
-  color: #334155;
+  color: var(--text-secondary);
   text-transform: capitalize;
 }
 .risk-count {
   font-size: 12px;
-  color: #475569;
+  color: var(--text-muted);
   text-align: right;
 }
 </style>

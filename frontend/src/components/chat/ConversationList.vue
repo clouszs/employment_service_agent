@@ -73,6 +73,10 @@ async function onDelete(id: number, e: Event) {
 .new-btn {
   width: 100%;
   margin-bottom: 12px;
+  background: linear-gradient(135deg, #4facfe, #00d4ff);
+  border: none;
+  color: #0a0e27;
+  font-weight: 600;
 }
 .conv-items {
   flex: 1;
@@ -85,18 +89,20 @@ async function onDelete(id: number, e: Event) {
   padding: 10px 10px;
   border-radius: 8px;
   cursor: pointer;
-  color: #374151;
+  color: var(--text-secondary);
   transition: background 0.15s;
 }
 .conv-item:hover {
-  background: #eef2f7;
+  background: rgba(79, 172, 254, 0.12);
 }
 .conv-item.active {
-  background: #e0e7ff;
-  color: #1e40af;
+  background: linear-gradient(135deg, rgba(79, 172, 254, 0.32), rgba(0, 212, 255, 0.32));
+  color: #ffffff;
+  border: 1px solid rgba(79, 172, 254, 0.4);
 }
 .conv-icon {
   flex-shrink: 0;
+  color: var(--accent-cyan);
 }
 .conv-title {
   flex: 1;
@@ -104,17 +110,21 @@ async function onDelete(id: number, e: Event) {
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: 14px;
+  color: var(--text-secondary);
+}
+.conv-item.active .conv-title {
+  color: #ffffff;
 }
 .conv-del {
   flex-shrink: 0;
   opacity: 0;
-  color: #9ca3af;
+  color: var(--text-muted);
   transition: opacity 0.15s;
 }
 .conv-item:hover .conv-del {
   opacity: 1;
 }
 .conv-del:hover {
-  color: #ef4444;
+  color: #f87171;
 }
 </style>

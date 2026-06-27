@@ -27,8 +27,9 @@ defineProps<{
   margin-top: 10px;
   padding: 10px 12px;
   border-radius: 8px;
-  background: #eff6ff;
-  border: 1px solid #93c5fd;
+  background: rgba(79, 172, 254, 0.12);
+  border: 1px solid rgba(79, 172, 254, 0.35);
+  color: var(--text-primary);
 }
 .refusal-head {
   display: flex;
@@ -36,12 +37,12 @@ defineProps<{
   gap: 6px;
   font-size: 13px;
   font-weight: 600;
-  color: #1d4ed8;
+  color: var(--accent-cyan);
   margin-bottom: 6px;
 }
 .refusal-body {
   font-size: 13px;
-  color: #1e3a8a;
+  color: var(--text-secondary);
 }
 .refusal-body p {
   margin: 0 0 6px;
@@ -50,8 +51,8 @@ defineProps<{
   display: inline-block;
   padding: 2px 8px;
   border-radius: 4px;
-  background: rgba(59, 130, 246, 0.12);
+  background: rgba(79, 172, 254, 0.14);
   font-size: 12px;
-  color: #2563eb;
+  color: var(--accent-blue);
 }
 </style>

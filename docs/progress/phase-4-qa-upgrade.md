@@ -111,6 +111,19 @@ print('Stage 4 imports OK')
 
 ---
 
+## Bug 修复记录补充（2026-06-26 联调）
+
+> 阶段 4 联调阶段补充 1 项前端对接 bug。
+
+| 问题 | 原因 | 修复 |
+|------|------|------|
+| 前端请求 `/ask/agent` 返回 422 参数校验失败 | `frontend/src/api/chat.ts` 请求体字段名为 `query`，与后端 `AskRequest.question` 不匹配 | 将前端请求体字段名改为 `question` |
+
+**关联文件：**
+- `frontend/src/api/chat.ts`：`askAgent()` 请求体修正为 `{ question, conversation_id }`
+
+---
+
 ## Bug 修复记录（2026-06-25）
 
 > 本批修复覆盖阶段 1-P0/P1 遗留问题、阶段 3 缺失项、阶段 4 接口一致性问题，共 6 项。

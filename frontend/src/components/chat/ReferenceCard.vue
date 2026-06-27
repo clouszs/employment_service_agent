@@ -1,8 +1,23 @@
 <script setup lang="ts">
-import { Document } from '@element-plus/icons-vue'
+import { computed } from 'vue'
+import { Document, Link } from '@element-plus/icons-vue'
 import type { Reference } from '@/types/chat'
 
-defineProps<{ references: Reference[] }>()
+const props = defineProps<{ references: Reference[] }>()
+
+const hasWeb = computed(() => props.references.some((r) => r.source_type === 'web'))
+const localRefs = computed(() => props.references.filter((r) => r.source_type !== 'web'))
+const webRefs = computed(() => props.references.filter((r) => r.source_type === 'web'))
+
+function formatDate(iso: string | null | undefined) {
+  if (!iso) return ''
+  try {
+    const d = new Date(iso)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  } catch {
+    return ''
+  }
+}
 </script>
 
 <template>
@@ -10,26 +25,57 @@ defineProps<{ references: Reference[] }>()
     <div class="ref-head">
       <el-icon><Document /></el-icon>
       <span>参考来源（{{ references.length }}）</span>
+      <el-tag v-if="hasWeb" type="warning" size="small" effect="plain">含外部检索</el-tag>
     </div>
-    <div v-for="(r, i) in references" :key="i" class="ref-item">
-      <div class="ref-title">
-        <span class="rank">[{{ r.rank_no || i + 1 }}]</span>
-        <span class="doc">《{{ r.document_title || '未知文档' }}》</span>
-        <span v-if="r.page_no" class="meta">第{{ r.page_no }}页</span>
-        <span v-if="r.score != null" class="meta">相似度 {{ r.score }}</span>
+
+    <!-- 本地知识库来源 -->
+    <template v-if="localRefs.length">
+      <div v-for="(r, i) in localRefs" :key="'local-' + i" class="ref-item">
+        <div class="ref-title">
+          <span class="rank">[{{ r.rank_no || i + 1 }}]</span>
+          <span class="doc">《{{ r.document_title || '未知文档' }}》</span>
+          <span v-if="r.page_no" class="meta">第{{ r.page_no }}页</span>
+          <span v-if="r.score != null" class="meta">相似度 {{ r.score }}</span>
+        </div>
+        <div v-if="r.snippet" class="ref-snippet">{{ r.snippet }}</div>
       </div>
-      <div v-if="r.snippet" class="ref-snippet">{{ r.snippet }}</div>
-    </div>
+    </template>
+
+    <!-- 外部检索来源 -->
+    <template v-if="webRefs.length">
+      <div v-for="(r, i) in webRefs" :key="'web-' + i" class="ref-item ref-item-web">
+        <div class="ref-title">
+          <span class="rank web-rank">[{{ r.rank_no || i + 1 }}]</span>
+          <span class="doc">{{ r.document_title || '外部文章' }}</span>
+          <el-tag v-if="r.source" size="small" effect="plain" type="info">{{ r.source }}</el-tag>
+          <span v-if="r.published_at" class="meta">{{ formatDate(r.published_at) }}</span>
+        </div>
+        <div v-if="r.snippet" class="ref-snippet">{{ r.snippet }}</div>
+        <a
+          v-if="r.url"
+          :href="r.url"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="ref-link"
+        >
+          <el-icon><Link /></el-icon>
+          <span>查看原文</span>
+        </a>
+      </div>
+    </template>
   </div>
 </template>
 
 <style scoped>
 .ref-card {
   margin-top: 8px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--glass-border-solid);
   border-radius: 8px;
-  background: #f8fafc;
+  background: var(--glass-bg);
   overflow: hidden;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: var(--text-primary);
 }
 .ref-head {
   display: flex;
@@ -38,12 +84,15 @@ defineProps<{ references: Reference[] }>()
   padding: 8px 12px;
   font-size: 12px;
   font-weight: 600;
-  color: #475569;
-  background: #f1f5f9;
+  color: var(--accent-cyan);
+  background: rgba(79, 172, 254, 0.12);
 }
 .ref-item {
   padding: 8px 12px;
-  border-top: 1px solid #eef2f7;
+  border-top: 1px solid rgba(79, 172, 254, 0.18);
+}
+.ref-item-web {
+  background: rgba(79, 172, 254, 0.08);
 }
 .ref-title {
   display: flex;
@@ -54,25 +103,41 @@ defineProps<{ references: Reference[] }>()
   margin-bottom: 4px;
 }
 .rank {
-  color: #2563eb;
+  color: var(--accent-blue);
   font-weight: 600;
 }
+.web-rank {
+  color: #fbbf24;
+}
 .doc {
-  color: #334155;
+  color: #ffffff;
   font-weight: 500;
 }
 .meta {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--text-muted);
 }
 .ref-snippet {
   font-size: 12px;
   line-height: 1.6;
-  color: #64748b;
+  color: var(--text-secondary);
   white-space: pre-wrap;
-  background: #fff;
-  border: 1px solid #eef2f7;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(79, 172, 254, 0.25);
   border-radius: 6px;
   padding: 6px 8px;
+}
+.ref-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--accent-cyan);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.ref-link:hover {
+  color: var(--accent-blue);
 }
 </style>

@@ -108,19 +108,57 @@ class FactVerificationPostProcessor:
         "count":     (r"\d+(个|项|种|类|份)", "数量"),
     }
 
-    def verify(self, text: str) -> list[dict]:
-        """核验文本中的事实要素，返回问题列表。"""
+    def verify(self, text: str, citations: list[dict] | None = None) -> list[dict]:
+        """核验文本中的事实要素，返回问题列表。
+
+        V1 增强：对提取到的事实要素，检查是否被引用内容支持。
+        - 被引用支持 → 标记为"已核验"
+        - 未被引用支持 → 标记为"未找到依据"，需用户关注
+        """
         issues: list[dict] = []
+        citation_text = ""
+        if citations:
+            citation_text = " ".join(
+                (c.get("snippet") or c.get("document_title") or "") for c in citations
+            ).lower()
+
         for fact_type, (pattern, label) in self.FACT_RULES.items():
             matches = re.findall(pattern, text)
-            if matches:
-                # 当前版本只标记存在的事实要素，不做跨源校验（V2 再加）
+            if not matches:
+                continue
+
+            unsupported: list[str] = []
+            for value in matches:
+                # 对 policy_no / date 做精确匹配；money / count 做宽松匹配
+                if fact_type in ("policy_no", "date"):
+                    if value not in citation_text:
+                        unsupported.append(value)
+                else:
+                    # 金额/数量：检查核心数字是否出现在引用中
+                    core = re.sub(r"[^\d.]", "", str(value))
+                    if core and core not in citation_text:
+                        unsupported.append(value)
+
+            if unsupported:
                 issues.append(
                     {
                         "fact_type": fact_type,
                         "label": label,
                         "values": matches,
-                        "note": "已识别，待跨源校验",
+                        "unsupported_values": unsupported,
+                        "note": f"以下{label}在引用中未找到依据：{', '.join(unsupported)}",
+                        "supported_count": len(matches) - len(unsupported),
+                    }
+                )
+            else:
+                issues.append(
+                    {
+                        "fact_type": fact_type,
+                        "label": label,
+                        "values": matches,
+                        "unsupported_values": [],
+                        "note": f"以下{label}已在引用中找到依据",
+                        "supported_count": len(matches),
                     }
                 )
         return issues
@@ -133,7 +171,7 @@ fact_verifier = FactVerificationPostProcessor()
 
 
 class SelfConsistencyChecker:
-    """自我一致性检查：V1 只做轻量标记，不做多轮生成比对。"""
+    """自我一致性检查：V1 轻量版 + 跨轮矛盾检测。"""
 
     def check(
         self,
@@ -142,21 +180,19 @@ class SelfConsistencyChecker:
     ) -> tuple[bool, list[dict]]:
         """检查当前回答是否与历史矛盾。
 
-        V1 简化：只检查"否定词 + 历史关键词"的明显矛盾。
+        V1 实现：
+        1. 检查当前回答内部是否存在明显矛盾（同时包含正反义词）
+        2. 检查当前回答与最后一轮助手回答是否存在跨轮矛盾
         """
-        if not history:
-            return True, []
-
         issues: list[dict] = []
-        last_topic = (history[-1].get("last_topic") if history else None)
-        if not last_topic:
-            return True, []
-
         current_lower = current_response.lower()
-        # 简单规则：历史说"可以"，当前说"不可以" → 标记
+
+        # ===== 检查 1：当前回答内部矛盾 =====
         contradiction_pairs = [
             (["可以", "能够", "允许"], ["不可以", "不能", "不允许", "不行"]),
             (["需要", "必须", "要求"], ["不需要", "不必", "不强制"]),
+            (["是", "属于", "包含"], ["不是", "不属于", "不包含"]),
+            (["有效", "有用", "可行"], ["无效", "没用", "不可行"]),
         ]
         for positive, negative in contradiction_pairs:
             has_positive = any(p in current_lower for p in positive)
@@ -165,10 +201,52 @@ class SelfConsistencyChecker:
                 issues.append(
                     {
                         "severity": "medium",
-                        "contradiction_type": f"同时包含{positive}和{negative}",
+                        "contradiction_type": f"回答内部同时包含{positive}和{negative}",
                         "description": "回答内部可能存在矛盾",
+                        "scope": "internal",
                     }
                 )
+
+        # ===== 检查 2：跨轮矛盾（与最后一轮助手回答对比）=====
+        if history:
+            # 查找最后一轮助手回答
+            last_assistant_response = None
+            for entry in reversed(history):
+                if entry.get("role") == "assistant" or entry.get("type") == "assistant":
+                    last_assistant_response = entry.get("content", "")
+                    break
+
+            if last_assistant_response:
+                last_lower = last_assistant_response.lower()
+
+                # 跨轮矛盾检测：正反义词在不同轮次中出现
+                for positive, negative in contradiction_pairs:
+                    current_has_positive = any(p in current_lower for p in positive)
+                    current_has_negative = any(n in current_lower for n in negative)
+                    last_has_positive = any(p in last_lower for p in positive)
+                    last_has_negative = any(n in last_lower for n in negative)
+
+                    # 上一轮说"可以"，这一轮说"不可以" → 矛盾
+                    if last_has_positive and current_has_negative:
+                        issues.append(
+                            {
+                                "severity": "high",
+                                "contradiction_type": f"与上一轮回答矛盾：上一轮包含{positive}，当前轮包含{negative}",
+                                "description": f"当前回答与上一轮回答存在矛盾",
+                                "scope": "cross_turn",
+                                "last_response_excerpt": last_assistant_response[:100],
+                            }
+                        )
+                    elif last_has_negative and current_has_positive:
+                        issues.append(
+                            {
+                                "severity": "high",
+                                "contradiction_type": f"与上一轮回答矛盾：上一轮包含{negative}，当前轮包含{positive}",
+                                "description": f"当前回答与上一轮回答存在矛盾",
+                                "scope": "cross_turn",
+                                "last_response_excerpt": last_assistant_response[:100],
+                            }
+                        )
 
         is_consistent = len(issues) == 0
         return is_consistent, issues

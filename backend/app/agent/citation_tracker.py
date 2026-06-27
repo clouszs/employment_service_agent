@@ -17,28 +17,43 @@ logger = logging.getLogger(__name__)
 
 
 def build_citations(hits: list[dict]) -> list[dict]:
-    """从检索结果构建引用列表（V1 简化：chunk 级别）。
+    """从检索结果构建引用列表（V1 简化：chunk 级别，支持本地+web 来源）。
 
     Args:
-        hits: 检索结果列表（来自 rag_service.search）
+        hits: 检索结果列表（来自 rag_service.search 或 web_search）
 
     Returns:
         引用列表，每条包含 rank / document_id / document_title / chunk_id /
-        score / page_no / snippet
+        score / page_no / snippet / source_type / url / source / published_at
     """
     citations = []
     for rank, h in enumerate(hits, start=1):
-        citations.append(
-            {
-                "rank": rank,
-                "document_id": h.get("document_id"),
-                "document_title": h.get("document_title"),
-                "chunk_id": h.get("chunk_id"),
-                "score": h.get("score"),
-                "page_no": h.get("page_no"),
-                "snippet": (h.get("content") or "")[:CITATION_SNIPPET_MAX_LENGTH],
-            }
-        )
+        metadata = h.get("metadata") or {}
+        source_type = metadata.get("source_type", "local")
+
+        citation: dict[str, Any] = {
+            "rank": rank,
+            "document_id": h.get("document_id"),
+            "document_title": h.get("document_title"),
+            "chunk_id": h.get("chunk_id"),
+            "score": h.get("score"),
+            "page_no": h.get("page_no"),
+            "snippet": (h.get("content") or "")[:CITATION_SNIPPET_MAX_LENGTH],
+            "source_type": source_type,
+        }
+
+        # web 来源补充 URL / source / published_at
+        if source_type == "web":
+            citation.update(
+                {
+                    "url": metadata.get("url"),
+                    "source": metadata.get("source"),
+                    "published_at": metadata.get("published_at"),
+                    "author": metadata.get("author"),
+                }
+            )
+
+        citations.append(citation)
     return citations
 
 

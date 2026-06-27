@@ -23,8 +23,9 @@ defineProps<{
   margin-top: 10px;
   padding: 10px 12px;
   border-radius: 8px;
-  background: #fff7ed;
-  border: 1px solid #fdba74;
+  background: rgba(251, 191, 36, 0.14);
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  color: var(--text-primary);
 }
 .tw-head {
   display: flex;
@@ -32,14 +33,14 @@ defineProps<{
   gap: 6px;
   font-size: 13px;
   font-weight: 600;
-  color: #c2410c;
+  color: var(--accent-cyan);
   margin-bottom: 6px;
 }
 .tw-list {
   margin: 0;
   padding-left: 18px;
   font-size: 13px;
-  color: #9a3412;
+  color: var(--text-secondary);
 }
 .tw-list li + li {
   margin-top: 2px;

@@ -49,9 +49,11 @@ const calls = computed(() => data.value?.total_calls ?? 0)
 <style scoped>
 .cost-card {
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(14px);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border-solid);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: var(--text-primary);
 }
 .card-head {
   display: flex;
@@ -60,6 +62,7 @@ const calls = computed(() => data.value?.total_calls ?? 0)
 }
 .card-title {
   font-weight: 600;
+  color: var(--accent-cyan);
 }
 .cost-body {
   margin-top: 6px;
@@ -70,11 +73,11 @@ const calls = computed(() => data.value?.total_calls ?? 0)
 .cost-amount {
   font-size: 24px;
   font-weight: 700;
-  color: #0f172a;
+  color: #ffffff;
 }
 .cost-calls {
   font-size: 12px;
-  color: #475569;
+  color: var(--text-muted);
 }
 .model-bars {
   display: flex;
@@ -89,7 +92,7 @@ const calls = computed(() => data.value?.total_calls ?? 0)
 }
 .model-name {
   font-size: 12px;
-  color: #334155;
+  color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -99,10 +102,10 @@ const calls = computed(() => data.value?.total_calls ?? 0)
   flex-direction: column;
   align-items: flex-end;
   font-size: 12px;
-  color: #475569;
+  color: var(--text-muted);
   min-width: 80px;
 }
 .muted {
-  color: #94a3b8;
+  color: var(--text-muted);
 }
 </style>

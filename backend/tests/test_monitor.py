@@ -184,8 +184,9 @@ except Exception as e:
     except Exception:
         pass
 
-# ==================== 汇总 ====================
-print(f"\n结果：passed={passed}, failed={failed}")
-if failed:
-    sys.exit(1)
-print("全部验证通过")
+if __name__ == "__main__":
+    # ==================== 汇总 ====================
+    print(f"\n结果：passed={passed}, failed={failed}")
+    if failed:
+        sys.exit(1)
+    print("全部验证通过")

@@ -44,6 +44,7 @@ export const useChatStore = defineStore('chat', () => {
   const loadingList = ref(false)
   const loadingMessages = ref(false)
   const sending = ref(false)
+  const _abortController = ref<AbortController | null>(null)
 
   async function loadConversations() {
     loadingList.value = true
@@ -82,28 +83,57 @@ export const useChatStore = defineStore('chat', () => {
   async function sendAgent(question: string) {
     const q = question.trim()
     if (!q || sending.value) return
+
+    const controller = new AbortController()
+    _abortController.value = controller
+
     messages.value.push({ role: 'user', content: q })
-    const assistant: ChatMessage = { role: 'assistant', content: '', streaming: true }
-    messages.value.push(assistant)
+    const placeholder: ChatMessage = { role: 'assistant', content: '', streaming: true }
+    messages.value.push(placeholder)
+    const placeholderIndex = messages.value.length - 1
     sending.value = true
     const isNew = currentId.value === null
 
     try {
-      const result = (await chatApi.askAgent(q, currentId.value ?? undefined)) as AgentAskResult
-      Object.assign(assistant, toAgentChatMessage(result))
+      const recentHistory = messages.value
+        .filter((m) => m.role !== 'assistant' || (m.id && !m.streaming))
+        .slice(-6)
+        .map((m) => ({ role: m.role, content: m.content }))
+      const result = (await chatApi.askAgent(q, currentId.value ?? undefined, recentHistory, controller.signal)) as AgentAskResult
+      const updated = toAgentChatMessage(result)
+      messages.value[placeholderIndex] = updated
       currentId.value = result.conversation_id || currentId.value
     } catch (e) {
-      if (!assistant.content) {
-        assistant.content = e instanceof Error ? e.message : '回答失败，请稍后重试。'
-        assistant.isNoAnswer = true
-        assistant.isError = true
+      if ((e as Error)?.name === 'AbortError' || (e as Error)?.message === 'aborted') {
+        messages.value[placeholderIndex] = {
+          ...placeholder,
+          content: '已终止生成。',
+          isNoAnswer: false,
+          isError: false,
+          streaming: false,
+        }
+        return
       }
-      assistant.streaming = false
+      const fallback: ChatMessage = {
+        ...placeholder,
+        content: e instanceof Error ? e.message : '回答失败，请稍后重试。',
+        isNoAnswer: true,
+        isError: true,
+        streaming: false,
+      }
+      messages.value[placeholderIndex] = fallback
     } finally {
       sending.value = false
+      _abortController.value = null
       if (isNew && currentId.value !== null) {
         await loadConversations()
       }
+    }
+  }
+
+  function cancelSend() {
+    if (_abortController.value) {
+      _abortController.value.abort()
     }
   }
 
@@ -119,5 +149,6 @@ export const useChatStore = defineStore('chat', () => {
     startNewConversation,
     removeConversation,
     sendAgent,
+    cancelSend,
   }
 })

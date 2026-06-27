@@ -27,6 +27,11 @@ export interface Reference {
   rank_no: number | null
   page_no: number | null
   snippet?: string | null
+  source_type?: 'local' | 'web'
+  url?: string | null
+  source?: string | null
+  published_at?: string | null
+  author?: string | null
 }
 
 export interface AskResult {
@@ -49,7 +54,14 @@ export interface AgentAskResult extends AskResult {
   is_error: boolean
   citations: Reference[]
   consistency_issues: Array<{ type?: string; severity?: string; detail?: string }>
-  fact_issues: Array<{ fact_type?: string; detail?: string }>
+  fact_issues: Array<{
+    fact_type?: string
+    label?: string
+    values?: string[]
+    unsupported_values?: string[]
+    note?: string
+    supported_count?: number
+  }>
   temporal_warnings: string[]
   warnings: string[]
   request_id: string

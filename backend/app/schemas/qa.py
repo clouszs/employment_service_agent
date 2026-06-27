@@ -9,7 +9,7 @@
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Optional, List
 
 from pydantic import BaseModel, Field
 
@@ -96,6 +96,7 @@ class FeedbackRead(ORMModel):
 class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=1024, description="用户问题")
     conversation_id: Optional[int] = Field(default=None, description="会话ID,为空则新建会话")
+    history: Optional[List[dict]] = Field(default=None, description="最近对话历史，用于跨轮一致性检查")
 
 
 class SearchRequest(BaseModel):

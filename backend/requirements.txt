@@ -36,3 +36,6 @@ alembic>=1.12.0
 
 # Embedding 缓存 L2（Redis 不可用时自动降级，不强依赖）— 阶段 0 引入
 redis>=5.0
+
+# 外部检索兜底 — 阶段 7 引入
+newsapi-python>=0.2.0

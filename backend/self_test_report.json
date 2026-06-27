@@ -1,0 +1,131 @@
+{
+  "timestamp": "2026-06-27T10:21:20.877375",
+  "base_url": "http://127.0.0.1:8000",
+  "passed": 29,
+  "failed": 0,
+  "total": 29,
+  "results": [
+    {
+      "name": "health",
+      "status": "pass"
+    },
+    {
+      "name": "qa/search",
+      "status": "pass"
+    },
+    {
+      "name": "qa/search hits count",
+      "status": "pass",
+      "value": 3
+    },
+    {
+      "name": "qa/ask",
+      "status": "pass"
+    },
+    {
+      "name": "qa/ask has response",
+      "status": "pass",
+      "value": 67
+    },
+    {
+      "name": "qa/ask/agent",
+      "status": "pass"
+    },
+    {
+      "name": "agent/ask has response",
+      "status": "pass",
+      "value": 480
+    },
+    {
+      "name": "conversations list",
+      "status": "pass"
+    },
+    {
+      "name": "conversations create",
+      "status": "pass"
+    },
+    {
+      "name": "conversations detail",
+      "status": "pass"
+    },
+    {
+      "name": "documents list",
+      "status": "pass"
+    },
+    {
+      "name": "faqs list",
+      "status": "pass"
+    },
+    {
+      "name": "kb-health/latest",
+      "status": "pass"
+    },
+    {
+      "name": "kb-health/run trigger",
+      "status": "pass"
+    },
+    {
+      "name": "llm-cost/daily",
+      "status": "pass"
+    },
+    {
+      "name": "llm-cost/monthly",
+      "status": "pass"
+    },
+    {
+      "name": "refusal/stats",
+      "status": "pass"
+    },
+    {
+      "name": "feedback/stats",
+      "status": "pass"
+    },
+    {
+      "name": "langsmith: health check reachable",
+      "status": "pass"
+    },
+    {
+      "name": "agent ask #1",
+      "status": "pass"
+    },
+    {
+      "name": "agent ask #2 (cache)",
+      "status": "pass"
+    },
+    {
+      "name": "semantic cache",
+      "status": "info",
+      "route1": "generate",
+      "route2": "generate"
+    },
+    {
+      "name": "agent ask for temporal_warnings",
+      "status": "pass"
+    },
+    {
+      "name": "temporal_warnings",
+      "status": "info"
+    },
+    {
+      "name": "agent ask for verify_facts",
+      "status": "pass"
+    },
+    {
+      "name": "verify_facts",
+      "status": "info"
+    },
+    {
+      "name": "graph singleton",
+      "status": "pass"
+    },
+    {
+      "name": "compiled graph cache",
+      "status": "pass"
+    },
+    {
+      "name": "frontend pages",
+      "status": "info",
+      "note": "Vue 3 SPA runs separately"
+    }
+  ]
+}

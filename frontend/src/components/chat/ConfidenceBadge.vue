@@ -27,8 +27,11 @@ const level = computed(() => {
   align-items: center;
   gap: 4px;
   border-radius: 999px;
+  border: 1px solid rgba(79, 172, 254, 0.35);
+  color: var(--text-primary);
 }
 .badge-icon {
   font-size: 14px;
+  color: var(--accent-cyan);
 }
 </style>

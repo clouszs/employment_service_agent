@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 
 const emit = defineEmits<{
-  send: [text: string]
+  send: [payload: { text: string; mode: 'agent' | 'search' }]
 }>()
 
 const query = ref('')
@@ -15,7 +15,7 @@ async function onSubmit() {
   if (!q || loading.value) return
   loading.value = true
   try {
-    emit('send', q)
+    emit('send', { text: q, mode: mode.value })
   } finally {
     loading.value = false
     query.value = ''
@@ -65,7 +65,7 @@ function onKeydown(e: KeyboardEvent) {
             type="primary"
             @click="onSubmit"
           >
-            提问
+            {{ mode === 'agent' ? '提问' : '检索' }}
           </el-button>
         </template>
       </el-input>

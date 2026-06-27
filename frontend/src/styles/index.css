@@ -1,7 +1,20 @@
+/* ==================== 全局深色主题变量 ==================== */
 :root {
-  --brand-color: #2563eb;
+  --chat-bg-start: #0a0e27;
+  --chat-bg-mid: #111837;
+  --chat-bg-end: #1a1f3a;
+  --glass-bg: rgba(255, 255, 255, 0.15);
+  --glass-border: linear-gradient(135deg, rgba(79, 172, 254, 0.6), rgba(0, 212, 255, 0.6));
+  --glass-border-solid: rgba(79, 172, 254, 0.35);
+  --text-primary: #ffffff;
+  --text-secondary: #e0e6f0;
+  --text-muted: #a9c2e0;
+  --accent-blue: #4facfe;
+  --accent-cyan: #00d4ff;
+  --accent-glow: rgba(56, 189, 248, 0.35);
 }
 
+/* ==================== 全局基础 ==================== */
 * {
   box-sizing: border-box;
 }
@@ -17,6 +30,97 @@ body,
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
     'Microsoft YaHei', sans-serif;
-  color: #1f2937;
-  background: #f5f7fa;
+  color: var(--text-primary);
+  background: linear-gradient(135deg, var(--chat-bg-start) 0%, var(--chat-bg-mid) 50%, var(--chat-bg-end) 100%);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Element Plus 深色适配：尽量用亮色文字，避免继承 body 后发灰 */
+.el-card,
+.el-dialog,
+.el-drawer,
+.el-dropdown-menu,
+.el-select-dropdown,
+.el-popover,
+.el-tooltip__popper,
+.el-message-box,
+.el-table,
+.el-tag,
+.el-input-number,
+.el-date-picker,
+.el-time-picker,
+.el-color-picker,
+.el-cascader,
+.el-transfer,
+.el-tree-select,
+.el-autocomplete,
+.el-upload-list {
+  --el-bg-color: rgba(15, 23, 42, 0.85);
+  --el-text-color-primary: var(--text-primary);
+  --el-text-color-regular: var(--text-secondary);
+  --el-text-color-secondary: var(--text-muted);
+  --el-border-color: var(--glass-border-solid);
+  --el-fill-color-blank: rgba(15, 23, 42, 0.7);
+  --el-fill-color-light: rgba(79, 172, 254, 0.12);
+}
+
+/* 表格、弹窗等容器背景微透 */
+.el-card,
+.el-dialog__wrapper,
+.el-drawer__body,
+.el-select-dropdown__list,
+.el-table,
+.el-table__body-wrapper,
+.el-table__header-wrapper {
+  background: rgba(15, 23, 42, 0.88) !important;
+  color: var(--text-primary);
+}
+
+/* 输入框全局深色 */
+.el-input__wrapper,
+.el-textarea__inner {
+  background: rgba(15, 23, 42, 0.65) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--glass-border-solid) !important;
+}
+.el-input__wrapper:hover,
+.el-textarea__inner:hover {
+  border-color: var(--accent-blue) !important;
+}
+.el-input__inner,
+.el-textarea__inner {
+  color: var(--text-primary) !important;
+}
+.el-input__inner::placeholder,
+.el-textarea__inner::placeholder {
+  color: var(--text-muted) !important;
+  opacity: 0.8;
+}
+
+/* 按钮基础 */
+.el-button--default {
+  --el-button-bg-color: rgba(15, 23, 42, 0.6);
+  --el-button-border-color: var(--glass-border-solid);
+  --el-button-text-color: var(--text-secondary);
+  --el-button-hover-text-color: var(--accent-cyan);
+}
+.el-button--primary {
+  --el-button-bg-color: linear-gradient(135deg, #4facfe, #00d4ff);
+  --el-button-border-color: transparent;
+  --el-button-text-color: #0a0e27;
+}
+.el-button--primary:hover {
+  --el-button-hover-text-color: #0a0e27;
+}
+
+/* 通用磨砂玻璃卡片 */
+.glass-card {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border-solid);
+  border-radius: 14px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
 }

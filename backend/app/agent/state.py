@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Optional
+from typing import TypedDict, Annotated, Optional
 
 from langgraph.graph import add_messages
 
 
-class AgentState(Annotated[dict, "AgentState"]):
+class AgentState(TypedDict):
     """LangGraph Agent 工作流状态。
 
-    使用 TypedDict 模式，支持 IDE 类型检查和 LangGraph 状态管理。
+    使用 TypedDict 定义，支持 IDE 类型检查和 LangGraph 状态管理。
     所有字段都是可选的，节点按需读写。
     """
 
@@ -43,6 +43,12 @@ class AgentState(Annotated[dict, "AgentState"]):
 
     # ===== 会话记忆（V1 简化）=====
     history: list[dict]  # 历史对话摘要（最近 N 轮）
+
+    # ===== 工具扩展结果（阶段 9 新增）=====
+    resume_data: dict  # 简历生成结果
+    job_recommendations: list[dict]  # 职位推荐结果
+    calendar_events: list[dict]  # 面试日程数据
+    announcements: list[dict]  # 公告列表
 
     # ===== 可解释性（V1 简化：只记核心字段）=====
     reasoning_chain: list[dict]  # 每步决策记录

@@ -33,6 +33,7 @@ class AgentGraph:
 
     def __init__(self) -> None:
         self.graph: StateGraph | None = None
+        self._compiled_graph: Any | None = None
 
     def build(self) -> StateGraph:
         """构建工作流图（节点 + 边）。"""
@@ -109,13 +110,21 @@ class AgentGraph:
         return graph
 
     def compile(self, db_path: str = "data/agent_checkpoints.db") -> Any:
-        """编译工作流，配置 Checkpoint。"""
+        """编译工作流，配置 Checkpoint。
+
+        第一次编译后缓存 compiled graph，后续直接返回缓存实例。
+        """
+        if self._compiled_graph is not None:
+            logger.info("AgentGraph 使用已编译缓存")
+            return self._compiled_graph
+
         graph = self.build()
         checkpointer = SqliteSaver(db_path=db_path)
 
         compiled = graph.compile(checkpointer)
+        self._compiled_graph = compiled
         logger.info(
-            "AgentGraph 已编译：checkpointer=%s",
+            "AgentGraph 已编译并缓存：checkpointer=%s",
             type(checkpointer).__name__,
         )
         return compiled

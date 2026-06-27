@@ -294,23 +294,40 @@
 
 #### 五重防护机制设计思路
 
-实际实现分散在以下文件：
+```python
+# ================================================================
+# 设计概念：五重防护机制的算法原理
+# 实际实现见 agent/hallucination_defense.py
+# ================================================================
 
-| 层级 | 实现文件 | 说明 |
-|------|----------|------|
-| 路由 + 循环防护 | `agent/nodes.py::route_query()` | 设置 `query_risk_level`，`tool_call_count >= 3` 时强制生成 |
-| 检索 + 去重 + 过期过滤 | `agent/nodes.py::search_knowledge()` | 调用 `knowledge_search()`，重试时 `_broaden_query()` 扩大召回 |
-| 动态置信度阈值 | `agent/hallucination_defense.py::DynamicConfidenceThreshold` | 按风险等级动态降级，最多重试 3 次 |
-| 带引用生成回答 | `agent/nodes.py::generate_response()` | `chat_with_usage()` 追踪 token，Prompt 约束来源标注 |
-| 自我一致性检查 | `agent/hallucination_defense.py::SelfConsistencyChecker` | V1 简化：检查"否定词 + 历史关键词"矛盾 |
-| 事实核验 | `agent/hallucination_defense.py::FactVerificationPostProcessor` | 正则提取政策编号/日期/金额，当前只标记 |
-| 内容审核 | `agent/nodes.py::content_moderation()` | V1 简化：关键词匹配，不调 LLM |
-| 拒答 / 直接回复 / 降级警告 | `agent/nodes.py::generate_refusal()` 等 | 模板化处理，不调 LLM |
+# 第一重：动态置信度阈值（设计概念）
+# 实际：hallucination_defense.DynamicConfidenceThreshold
+# 根据 query_risk_level (high/medium/low) 使用不同阈值
+#   high:  min_confidence=0.80, min_results=3
+#   medium: min_confidence=0.65, min_results=2
+#   low:   min_confidence=0.40, min_results=1
 
-防循环机制：
-- **工具选择循环**：`route_query()` 中 `tool_call_count >= 3` 强制退出
-- **条件判断循环**：`check_confidence()` 每次重试降低阈值 0.15，最多 3 次后降级回答
-- **结果验证循环**：`regenerate_with_hints()` 仅对 high 严重度问题注入修正，`check_consistency()` 非阻塞
+# 第二重：置信度过滤（设计概念）
+# 实际：check_confidence 节点中实现
+# 过滤掉 score < retrieve_score_threshold 的检索结果
+
+# 第三重：引用强制生成（设计概念）
+# 实际：generator.py prompt 中的 SYSTEM_PROMPT 约束
+# "每说一个事实，必须在句尾用 [来源: XXX] 标注来源"
+
+# 第四重：自我一致性检查（设计概念）
+# 实际：hallucination_defense.SelfConsistencyChecker
+# 检查当前回答与历史回答是否矛盾
+
+# 第五重：事实核验（设计概念）
+# 实际：hallucination_defense.FactVerificationPostProcessor
+# 正则提取政策编号/日期/金额，验证格式和合理性
+```
+
+> **与设计文档 v2.0 的差异**：
+> - v2.0 设计为"三重防护"（固定阈值 + 引用强制 + 拒答），v3.0 扩展为"五重防护"
+> - 第四重（动态阈值）和第五重（事实核验）为 v3.0 新增
+> - 实际代码中，五重防护分散在 11 个 LangGraph 节点中实现，而非集中在一个类里
 
 ### 3.2 溯源问题（Citation & Traceability）
 
@@ -332,63 +349,38 @@
    - 调试困难
 ```
 
-#### 解决方案：Chunk 级别引用构建（V1 简化版）
+#### 解决方案：精确到句子级别的引用追踪
 
-实际文件：`backend/app/agent/citation_tracker.py`
+```python
+# ================================================================
+# 实际实现：ChromaDB 检索 + citation_tracker.py 构建引用
+# ================================================================
 
-V1 实现：
-- `build_citations(hits)` → list[dict]
-  - 从检索结果直接构建引用列表（chunk 级别）
-  - 每条引用包含 rank / document_id / document_title / chunk_id /
-    score / page_no / snippet（截断至 CITATION_SNIPPET_MAX_LENGTH=200 字符）
-  - 不做 LLM 级支持度验证（V2 再加）
+from app.agent.citation_tracker import build_citations
 
-- `evaluate_citation_quality(citations)` → dict
-  - 评估引用整体质量（V1 简化版）
-  - 仅基于检索得分区间映射为 direct / indirect / none
-  - direct: score >= 0.75, indirect: 0.40 <= score < 0.75, none: score < 0.40
+# ChromaDB 检索结果自带 metadata（doc_title, valid_until, chunk_id 等）
+# citation_tracker.build_citations() 基于检索结果构建句子级引用列表
 
-V2 预留接口：
-- `SentenceLevelCitationTracker.track()` → raise NotImplementedError
-  - 设计意图：将回答按 。！？； 切分为句子
-  - 对每个句子找最相关的来源 chunk（Embedding 相似度）
-  - 使用 LLM 验证引用支持度（direct/indirect/none）
+def build_citations(
+    response: str,
+    search_results: list[dict],
+    max_snippet_length: int = 200,
+) -> list[dict]:
+    """构建引用列表（agent/citation_tracker.py）。
 
-实际代码：
-
-from app.agent.constants import CITATION_SNIPPET_MAX_LENGTH
-
-
-def build_citations(hits: list[dict]) -> list[dict]:
-    """从检索结果构建引用列表（V1 简化：chunk 级别）。
-
-    Args:
-        hits: 检索结果列表（来自 rag_service.search / knowledge_search）
-
-    Returns:
-        引用列表，每条包含 rank / document_id / document_title / chunk_id /
-        score / page_no / snippet
+    流程：
+    1. 将回答切分为句子
+    2. 对每个句子找到最相关的检索结果
+    3. 使用 LLM 验证支持度（direct/indirect/none）
+    4. 返回带 ref_id 的引用列表
     """
-    citations = []
-    for rank, h in enumerate(hits, start=1):
-        citations.append(
-            {
-                "rank": rank,
-                "document_id": h.get("document_id"),
-                "document_title": h.get("document_title"),
-                "chunk_id": h.get("chunk_id"),
-                "score": h.get("score"),
-                "page_no": h.get("page_no"),
-                "snippet": (h.get("content") or "")[:CITATION_SNIPPET_MAX_LENGTH],
-            }
-        )
-    return citations
+    ...
 ```
 
 > **与设计文档 v2.0 的差异**：
 > - v2.0 使用 LlamaIndex 内置 Citation 功能，实际代码不依赖 LlamaIndex
 > - 引用基于 ChromaDB 检索结果的 metadata 构建
-> - V1 为 chunk 级别引用（非句子级），V2 预留 SentenceLevelCitationTracker
+> - 句子级引用通过 `citation_tracker.py` 独立实现，支持度验证使用 LLM judge
 
 ### 3.3 时效性问题（Temporal Accuracy）
 
@@ -2273,21 +2265,130 @@ def setup_langsmith() -> bool:
     return True
 ```
 
-**调用时机**：`main.py` 的 `lifespan()` 启动时调用 `setup_langsmith()`。
+```python
+# ================================================================
+# LangSmith 调用时机（main.py lifespan）
+# ================================================================
 
-**节点追踪**：`agent/nodes.py` 中的 `route_query`、`search_knowledge`、`generate_response` 等函数通过 `@traceable` 装饰器自动上报 LangSmith。
+from contextlib import asynccontextmanager
+from app.core.langsmith_setup import setup_langsmith
 
-**LLM 追踪**：`core/llm.py` 的 `chat_with_usage()` 返回 token 消耗，配合 `@traceable` 自动记录模型名、延迟。
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理。"""
+    # 启动时初始化
+    setup_logging()
+    setup_langsmith()  # ← 在此处调用，全局生效
+    setup_scheduler()  # 监控定时任务
+    yield
+    # 关闭时优雅释放资源
+    ...
+
+
+# ================================================================
+# Agent 节点上的 @traceable 装饰器（agent/nodes.py）
+# ================================================================
+
+from langsmith import traceable
+
+@traceable(name="agent.route", tags=["agent", "routing"])
+def route_query(state: dict) -> dict:
+    """路由决策节点。LangSmith 自动记录：输入 state、输出 state、执行时间。"""
+    ...
+
+@traceable(name="agent.search", tags=["agent", "retrieval"])
+def search_knowledge(state: dict) -> dict:
+    """检索节点。LangSmith 自动记录：检索耗时、结果数量、平均分数。"""
+    ...
+
+@traceable(name="agent.generate", tags=["agent", "generation"])
+def generate_response(state: dict) -> dict:
+    """生成节点。LangSmith 自动记录：prompt tokens、completion tokens、延迟。"""
+    ...
+
+# 其他节点（check_confidence, check_consistency, verify_facts, content_moderation 等）
+# 同样使用 @traceable 装饰器，LangSmith 自动追踪整个调用链路
+```
+
+```python
+# ================================================================
+# LLM 调用追踪（core/llm.py）
+# ================================================================
+
+def chat_with_usage(messages: list[dict], temperature: float = 0.3) -> tuple[str, dict]:
+    """非流式对话，返回 (答案文本, {prompt_tokens, completion_tokens})。
+
+    LangSmith 通过 @traceable 装饰器自动记录：
+    - 输入 messages
+    - 输出 response
+    - 模型名（settings.llm_model）
+    - Token 消耗（prompt_tokens, completion_tokens）
+    - 延迟（通过 langsmith 自动计算）
+    """
+    resp = _chat_completion(messages, temperature)
+    usage = resp.usage or {}
+    return (
+        resp.choices[0].message.content or "",
+        {
+            "prompt_tokens": getattr(usage, "prompt_tokens", 0) or 0,
+            "completion_tokens": getattr(usage, "completion_tokens", 0) or 0,
+        },
+    )
+```
 
 > **与实际实现的对应关系**：
 > 1. **配置位置**：`core/config.py` 中的 `langsmith_enabled`、`langsmith_api_key`、`langsmith_project`、`langsmith_endpoint` 字段
 > 2. **初始化位置**：`main.py` 的 `lifespan()` 函数中调用 `setup_langsmith()`
-> 3. **追踪方式**：`@traceable` 装饰器标记在 `agent/nodes.py` 的关键节点函数上
-> 4. **LLM 追踪**：`core/llm.py` 的 `chat_with_usage()` 返回 token 消耗数据
+> 3. **追踪方式**：`@traceable` 装饰器直接标记在 `agent/nodes.py` 的 11 个节点函数上
+> 4. **LLM 追踪**：`core/llm.py` 的 `chat_with_usage()` 返回 token 消耗数据，LangSmith 自动记录
 > 5. **不使用**：
 >    - `os.environ` 硬编码在业务代码中（仅在 `langsmith_setup.py` 中设置）
 >    - `LangChainCheckpointSaver`（实际使用自定义 `SqliteSaver`）
 >    - 手动 `trace()` 上下文管理器
+
+### 5.2 LangSmith Dashboard 展示内容
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           LangSmith Dashboard                                  │
+│                                                                                  │
+│  ┌─────────────────────────────────────────────────────────────────────────┐   │
+│  │  项目概览                         最近 7 天                               │   │
+│  │                                                                              │   │
+│  │  总调用次数    平均延迟    Token消耗    错误率                           │   │
+│  │  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐                     │   │
+│  │  │  12,847 │  │  1.2s   │  │  2.3M   │  │  0.8%   │                     │   │
+│  │  └─────────┘  └─────────┘  └─────────┘  └─────────┘                     │   │
+│  └─────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                  │
+│  ┌─────────────────────────────────────────────────────────────────────────┐   │
+│  │  调用链路追踪 (Trace)                                                    │   │
+│  │                                                                              │   │
+│  │  Run ID: run_abc123                                                       │   │
+│  │  Status: Success                                                           │   │
+│  │  Duration: 2.34s                                                           │   │
+│  │                                                                              │   │
+│  │  route (0.12s)                                                            │   │
+│  │    → search (0.45s)                                                        │   │
+│  │    → check_confidence (0.02s)                                              │   │
+│  │    → generate (1.77s)  ← tokens: 342 in, 156 out                          │   │
+│  │    → check_consistency (0.15s)                                             │   │
+│  │    → verify_facts (0.08s)                                                  │   │
+│  │    → content_moderation (0.05s)                                            │   │
+│  │                                                                              │   │
+│  └─────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                  │
+│  ┌─────────────────────────────────────────────────────────────────────────┐   │
+│  │  Prompt 版本管理                                                         │   │
+│  │                                                                              │   │
+│  │  版本    创建时间        使用次数    状态                                 │   │
+│  │  v1.2    2024-01-15     3,421        Current                              │   │
+│  │  v1.1    2024-01-10     8,234        Deprecated                           │   │
+│  │                                                                              │   │
+│  └─────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
 
 ### 5.3 监控指标
 
@@ -2312,45 +2413,43 @@ def setup_langsmith() -> bool:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                              RAG 检索流程                                        │
+│                              检索层                                             │
 │                                                                                  │
 │  user_query                                                                     │
 │      │                                                                          │
 │      ▼                                                                          │
 │  ┌─────────────────────────────────────────────────────────────────────────┐   │
-│  │  敏感词过滤（ops_service.moderate）                                     │   │
-│  │  • 命中则拦截/替换后继续                                                  │   │
+│  │  Query Processing                                                       │   │
+│  │  • 查询改写（可选，基于 LLM）                                             │   │
+│  │  • FAQ 快速命中（faq_collection 优先检查）                                 │   │
+│  │  • 语义缓存检查（Redis，semantic_cache_enabled）                          │   │
 │  └─────────────────────────────────────────────────────────────────────────┘   │
 │      │                                                                          │
 │      ▼                                                                          │
 │  ┌─────────────────────────────────────────────────────────────────────────┐   │
-│  │  FAQ 快速匹配（rag_service.faq_match）                                   │   │
-│  │  • faq_collection 余弦相似度 >= 阈值 → 直接返回标准答案                   │   │
-│  │  • 不走 LLM，降低延迟和成本                                              │   │
+│  │  ChromaDB 向量检索                                                       │   │
+│  │  • collection: kb_chunks (主知识库)                                       │   │
+│  │  • collection: kb_faqs (FAQ 专用集合)                                     │   │
+│  │  • top_k: retrieve_top_k (默认 5)                                         │   │
+│  │  • score_threshold: retrieve_score_threshold (默认 0.4)                   │   │
 │  └─────────────────────────────────────────────────────────────────────────┘   │
 │      │                                                                          │
 │      ▼                                                                          │
 │  ┌─────────────────────────────────────────────────────────────────────────┐   │
-│  │  语义缓存检查（SemanticCache，Redis）                                    │   │
-│  │  • 精确匹配或语义相似度 >= threshold → 直接返回缓存答案                   │   │
-│  │  • 未命中则继续正常检索                                                  │   │
+│  │  时效性调整（agent/temporal_retriever.py）                                │   │
+│  │  • apply_temporal_adjustment(): 计算综合得分                                │   │
+│  │    combined = similarity * 0.7 + temporal_score * 0.3                      │   │
+│  │  • filter_expired_docs(): 过滤/降权过期文档                                │   │
+│  │  • 半衰期：kb_freshness_half_life (默认 180 天)                            │   │
+│  │  • 过期宽限期：kb_warning_days (默认 30 天)                                │   │
 │  └─────────────────────────────────────────────────────────────────────────┘   │
 │      │                                                                          │
 │      ▼                                                                          │
 │  ┌─────────────────────────────────────────────────────────────────────────┐   │
-│  │  ChromaDB 向量检索（rag_service.search）                                 │   │
-│  │  • collection: kb_chunks (主知识库)                                      │   │
-│  │  • top_k: retrieve_top_k（默认 5）                                       │   │
-│  │  • 最高分 < retrieve_score_threshold → 无答案兜底                         │   │
-│  └─────────────────────────────────────────────────────────────────────────┘   │
-│      │                                                                          │
-│      ▼                                                                          │
-│  ┌─────────────────────────────────────────────────────────────────────────┐   │
-│  │  Agent 节点后处理                                                        │   │
-│  │  • search_knowledge：过期文档过滤 + 降权标记（temporal_retriever）         │   │
-│  │  • check_confidence：动态置信度判断（hallucination_defense）              │   │
-│  │  • generate_response：带引用生成（chat_with_usage）                       │   │
-│  │  • check_consistency + verify_facts + content_moderation                  │   │
+│  │  引用构建（agent/citation_tracker.py）                                    │   │
+│  │  • build_citations(): 构建引用列表                                         │   │
+│  │  • 句子级别引用追踪（支持度验证：direct/indirect/none）                     │   │
+│  │  • CITATION_SNIPPET_MAX_LENGTH (默认 200 字符)                             │   │
 │  └─────────────────────────────────────────────────────────────────────────┘   │
 │                                                                                  │
 └─────────────────────────────────────────────────────────────────────────────────┘
@@ -2358,12 +2457,33 @@ def setup_langsmith() -> bool:
 
 ### 6.2 为什么选择 ChromaDB 直接检索？
 
-原因：
-- ✅ 复用现有 ChromaDB 基础设施
-- ✅ 减少外部依赖（无需 Cohere API、Elasticsearch）
-- ✅ 语义缓存（Redis）已覆盖性能优化需求
-- ✅ 时效性调整直接在检索结果上叠加，无需额外框架
-- ✅ 就业政策场景数据量适中，ChromaDB 足够支撑
+```
+当前实现（ChromaDB + 时效性调整）：
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│  user_query                                                              │
+│      │                                                                  │
+│      ├─→ FAQ 快速命中（cosine similarity >= 0.75）                       │
+│      │                                                                  │
+│      ├─→ ChromaDB 向量检索（kb_chunks collection）                       │
+│      │   • top_k = retrieve_top_k                                        │
+│      │   • 过滤 score < retrieve_score_threshold                         │
+│      │                                                                  │
+│      ├─→ 时效性调整（temporal_retriever.py）                              │
+│      │   • combined_score = similarity * 0.7 + temporal * 0.3             │
+│      │   • 过期文档降权（* 0.1）或宽限期降权（* 0.5）                      │
+│      │                                                                  │
+│      └─→ 引用构建（citation_tracker.py）                                  │
+│          • 句子级引用 + 支持度验证                                         │
+│                                                                          │
+│  优势：                                                                   │
+│  ✅ 复用现有 ChromaDB 基础设施                                             │
+│  ✅ 减少外部依赖（无需 Cohere API、Elasticsearch）                         │
+│  ✅ 语义缓存（Redis）已覆盖性能优化需求                                    │
+│  ✅ 时效性调整直接在检索结果上叠加，无需额外框架                            │
+│  ✅ 就业政策场景数据量适中，ChromaDB 足够支撑                              │
+└─────────────────────────────────────────────────────────────────────────┘
+```
 
 ### 6.3 ChromaDB 向量检索
 

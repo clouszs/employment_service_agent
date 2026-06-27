@@ -55,9 +55,11 @@ const color = computed(() => {
 <style scoped>
 .kb-card {
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(14px);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border-solid);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: var(--text-primary);
 }
 .card-head {
   display: flex;
@@ -66,12 +68,10 @@ const color = computed(() => {
 }
 .card-title {
   font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  color: var(--accent-cyan);
 }
 .score-pill {
-  color: #fff;
+  color: #0a0e27;
   border-radius: 999px;
   padding: 0 12px;
   font-weight: 700;
@@ -87,23 +87,23 @@ const color = computed(() => {
 .kb-item {
   padding: 10px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.8);
+  background: rgba(79, 172, 254, 0.12);
+  border: 1px solid rgba(79, 172, 254, 0.25);
 }
 .kb-label {
   font-size: 12px;
-  color: #475569;
+  color: var(--text-muted);
 }
 .kb-value {
   font-size: 18px;
   font-weight: 700;
-  color: #0f172a;
+  color: #ffffff;
   margin-top: 4px;
 }
 .kb-value.warn {
-  color: #f59e0b;
+  color: #fbbf24;
 }
 .kb-value.danger {
-  color: #ef4444;
+  color: #f87171;
 }
 </style>
