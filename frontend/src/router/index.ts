@@ -46,6 +46,7 @@ const router = createRouter({
         { path: 'announcements', name: 'admin-announcements', component: () => import('@/views/admin/AnnouncementsView.vue') },
         { path: 'settings', name: 'admin-settings', component: () => import('@/views/admin/SettingsView.vue') },
         { path: 'qa-config', name: 'admin-qa-config', component: () => import('@/views/admin/QaConfigView.vue') },
+        { path: 'conversations', name: 'admin-conversations', component: () => import('@/views/admin/ConversationsView.vue') },
       ],
     },
     { path: '/', redirect: '/chat' },

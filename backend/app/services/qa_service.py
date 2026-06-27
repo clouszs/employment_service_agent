@@ -63,6 +63,14 @@ def soft_delete_conversation(db: Session, conv: QaConversation) -> None:
     db.commit()
 
 
+def force_delete_conversation(db: Session, conv: QaConversation) -> None:
+    """管理端强制删除：级联删除消息 + 引用，再删会话。"""
+    # 先删除关联消息（级联删除引用）
+    db.query(QaMessage).filter(QaMessage.conversation_id == conv.id).delete(synchronize_session=False)
+    db.delete(conv)
+    db.commit()
+
+
 # ==================== 消息 ====================
 def list_messages(db: Session, conversation_id: int) -> list[QaMessage]:
     return list(

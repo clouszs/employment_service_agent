@@ -47,6 +47,7 @@ from app.routers import (
     unanswered,
     user_favorite,
     users,
+    admin_conversations,
 )
 
 load_dotenv(find_dotenv())
@@ -160,6 +161,7 @@ app.include_router(unanswered.router, prefix=settings.api_prefix)
 app.include_router(app_config.router, prefix=settings.api_prefix)
 app.include_router(user_favorite.router, prefix=settings.api_prefix)
 app.include_router(announcements.router, prefix=settings.api_prefix)
+app.include_router(admin_conversations.router, prefix=settings.api_prefix)
 
 
 @app.get("/")
