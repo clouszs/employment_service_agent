@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { Refresh } from '@element-plus/icons-vue'
+import { Refresh, Timer } from '@element-plus/icons-vue'
 import { storeToRefs } from 'pinia'
 import { useMonitorStore } from '@/stores/monitor'
 import * as monitorApi from '@/api/monitor'
-import type { KbHealthLogRead, LlmCostLogRead, AgentRefusalLogRead } from '@/types/monitor'
+import type { KbHealthLogRead, LlmCostLogRead, AgentRefusalLogRead, LlmCostMonthlyRead } from '@/types/monitor'
 import type { PageResult } from '@/types/api'
 
 const monitorStore = useMonitorStore()
@@ -17,6 +17,17 @@ const activeTab = ref('health')
 const healthHistory = ref<PageResult<KbHealthLogRead>>({ total: 0, page: 1, size: 20, items: [] })
 const costHistory = ref<PageResult<LlmCostLogRead>>({ total: 0, page: 1, size: 20, items: [] })
 const refusalList = ref<PageResult<AgentRefusalLogRead>>({ total: 0, page: 1, size: 20, items: [] })
+
+// 月度成本
+const monthlyCost = ref<LlmCostMonthlyRead | null>(null)
+const loadingMonthly = ref(false)
+const monthlyYear = ref(new Date().getFullYear())
+const monthlyMonth = ref(new Date().getMonth() + 1)
+const monthOptions = Array.from({ length: 12 }, (_, i) => ({ label: `${i + 1}月`, value: i + 1 }))
+const yearOptions = Array.from({ length: 5 }, (_, i) => ({ label: `${new Date().getFullYear() - i}年`, value: new Date().getFullYear() - i }))
+
+// 健康检查
+const runningHealthCheck = ref(false)
 
 async function loadAll() {
   await monitorStore.refreshDashboardCards()
@@ -47,18 +58,54 @@ async function loadRefusalList() {
   }
 }
 
-async function onRefresh() {
-  await loadAll()
+async function loadMonthlyCost() {
+  loadingMonthly.value = true
+  try {
+    monthlyCost.value = await monitorApi.getLlmCostMonthly(monthlyYear.value, monthlyMonth.value)
+  } catch {
+    monthlyCost.value = null
+  } finally {
+    loadingMonthly.value = false
+  }
 }
 
-onMounted(loadAll)
+async function onRunHealthCheck() {
+  runningHealthCheck.value = true
+  try {
+    await monitorApi.runKbHealthCheck()
+    // 刷新数据
+    await Promise.all([monitorStore.loadKbHealthLatest(), loadHealthHistory()])
+  } finally {
+    runningHealthCheck.value = false
+  }
+}
+
+async function onRefresh() {
+  await loadAll()
+  if (activeTab.value === 'cost') {
+    await loadMonthlyCost()
+  }
+}
+
+onMounted(() => {
+  loadAll()
+  loadMonthlyCost()
+})
 </script>
 
 <template>
   <div class="monitor-view">
     <div class="monitor-header">
       <h2 class="monitor-title">监控中心</h2>
-      <el-button :icon="Refresh" @click="onRefresh">刷新</el-button>
+      <div class="header-actions">
+        <el-button v-if="activeTab === 'cost'" :icon="Timer" :loading="loadingMonthly" @click="loadMonthlyCost">
+          查询月度
+        </el-button>
+        <el-button v-if="activeTab === 'health'" type="primary" :icon="Refresh" :loading="runningHealthCheck" @click="onRunHealthCheck">
+          健康检查
+        </el-button>
+        <el-button :icon="Refresh" @click="onRefresh">刷新</el-button>
+      </div>
     </div>
 
     <el-tabs v-model="activeTab" class="monitor-tabs">
@@ -153,6 +200,37 @@ onMounted(loadAll)
               </div>
               <el-empty v-else description="暂无数据" :image-size="40" />
             </el-card>
+
+            <el-card class="summary-card" shadow="never" v-loading="loadingMonthly">
+              <template #header>
+                <div class="list-head">
+                  <span class="list-title">月度成本</span>
+                  <div class="month-picker">
+                    <el-select v-model="monthlyYear" size="small" style="width: 100px">
+                      <el-option v-for="y in yearOptions" :key="y.value" :label="y.label" :value="y.value" />
+                    </el-select>
+                    <el-select v-model="monthlyMonth" size="small" style="width: 80px">
+                      <el-option v-for="m in monthOptions" :key="m.value" :label="m.label" :value="m.value" />
+                    </el-select>
+                  </div>
+                </div>
+              </template>
+              <div v-if="monthlyCost" class="summary-grid">
+                <div class="summary-item">
+                  <div class="summary-label">统计月份</div>
+                  <div class="summary-value">{{ monthlyCost.year }}-{{ String(monthlyCost.month).padStart(2, '0') }}</div>
+                </div>
+                <div class="summary-item">
+                  <div class="summary-label">总成本</div>
+                  <div class="summary-value">${{ monthlyCost.total_cost_usd.toFixed(4) }}</div>
+                </div>
+                <div class="summary-item">
+                  <div class="summary-label">模型数</div>
+                  <div class="summary-value">{{ monthlyCost.models?.length || 0 }}</div>
+                </div>
+              </div>
+              <el-empty v-else description="暂无数据" :image-size="40" />
+            </el-card>
           </div>
 
           <el-card class="list-card" shadow="never">
@@ -236,6 +314,10 @@ onMounted(loadAll)
   justify-content: space-between;
   margin-bottom: 16px;
 }
+.header-actions {
+  display: flex;
+  gap: 8px;
+}
 .monitor-title {
   font-size: 18px;
   font-weight: 700;
@@ -249,7 +331,7 @@ onMounted(loadAll)
 }
 .summary-row {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 12px;
 }
 .summary-card {
@@ -293,6 +375,10 @@ onMounted(loadAll)
 .summary-value.small {
   font-size: 13px;
   font-weight: 600;
+}
+.month-picker {
+  display: flex;
+  gap: 6px;
 }
 .list-card {
   border-radius: 14px;

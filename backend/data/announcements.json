@@ -1,0 +1,31 @@
+{
+  "announcements": [
+    {
+      "id": 1,
+      "title": "2026 届毕业生就业手续办理指南",
+      "content": "2026 届毕业生请于 6 月 30 日前完成就业协议签署，逾期将影响派遣。",
+      "priority": "high",
+      "effective_time": "2026-06-01T00:00:00",
+      "expire_time": "2026-07-31T23:59:59",
+      "status": "active"
+    },
+    {
+      "id": 2,
+      "title": "校园双选会时间安排",
+      "content": "秋季双选会定于 10 月中旬举行，具体企业名单将提前 2 周公布。",
+      "priority": "medium",
+      "effective_time": "2026-09-01T00:00:00",
+      "expire_time": "2026-10-31T23:59:59",
+      "status": "active"
+    },
+    {
+      "id": 3,
+      "title": "就业指导中心暑假值班安排",
+      "content": "暑假期间（7-8 月）值班时间为每周二、周四上午 9:00-12:00。",
+      "priority": "low",
+      "effective_time": "2026-07-01T00:00:00",
+      "expire_time": "2026-08-31T23:59:59",
+      "status": "active"
+    }
+  ]
+}

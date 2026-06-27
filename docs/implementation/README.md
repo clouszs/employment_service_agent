@@ -20,6 +20,7 @@
 | [phase-4-qa-upgrade.md](../progress/phase-4-qa-upgrade.md) | 阶段 4：问答服务升级（Agent 工作流集成、`/ask/agent` 端点） |
 | [phase-5-routing-schema.md](../progress/phase-5-routing-schema.md) | 阶段 5：路由 + Schema 补齐（监控路由、qa 响应对齐） |
 | [phase-6-frontend.md](../progress/phase-6-frontend.md) | 阶段 6：前端对接（三栏布局、Agent 组件、监控中心） |
+| [project-assessment.md](../progress/project-assessment.md) | 项目评估报告（幻觉/溯源/时效性/准确性分析 + 优化建议） |
 
 ---
 
@@ -33,8 +34,8 @@
 | 阶段 3：监控告警模块 | ✅ 完成 | 2026-06-25 | 知识库健康度监控 + LLM 成本监控 + 引用质量评估 + APScheduler |
 | 阶段 4：问答服务升级 | ✅ 完成 | 2026-06-25 | `qa_service.agent_chat()` 集成 Agent 工作流 + `/ask/agent` 端点 |
 | 阶段 5：路由 + Schema | ✅ 完成 | 2026-06-25 | Schema 抽离 + 3 个监控路由（kb_health/llm_cost/refusal）+ qa.py 响应对齐 |
-| 阶段 6：前端对接 | 🔄 进行中 | 2026-06-25 | 三栏布局 + Agent 组件 + 监控中心 + 文档更新 |
-| 阶段 7：集成测试 + 灰度 | ⏸️ 待阶段 6 | — | — |
+| 阶段 6：前端对接 | ✅ 完成 | 2026-06-25 ~ 2026-06-26 | 三栏布局 + Agent 组件 + 监控中心 + 样式升级 + bugfixes |
+| 阶段 7：集成测试 + 灰度 | 🔄 进行中 | 2026-06-26 | 联调验证 / 学生端权限修复 / 问答显示修复 / 视觉样式升级 |
 
 ---
 
