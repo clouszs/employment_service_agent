@@ -18,6 +18,7 @@ import {
   SwitchButton,
   ChatLineRound,
   Monitor,
+  Setting,
 } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import ParticlesBg from '@/components/common/ParticlesBg.vue'
@@ -43,6 +44,8 @@ const TITLES: Record<string, string> = {
   'admin-roles': '角色管理',
   'admin-sensitive': '敏感词管理',
   'admin-monitor': '监控中心',
+'admin-settings': '系统设置',
+'admin-qa-config': '智能问答配置',
 }
 const pageTitle = computed(() => TITLES[String(route.name)] || '管理后台')
 
@@ -136,7 +139,14 @@ function onLogout() {
             <el-menu-item index="/admin/sensitive-words">
               <el-icon><Warning /></el-icon><span>敏感词</span>
             </el-menu-item>
-          </el-menu-item-group>
+          
+  <el-menu-item index="/admin/settings">
+    <el-icon><Setting /></el-icon><span>系统设置</span>
+  </el-menu-item>
+  <el-menu-item index="/admin/qa-config">
+    <el-icon><ChatLineSquare /></el-icon><span>智能问答配置</span>
+  </el-menu-item>
+</el-menu-item-group>
         </el-menu>
       </div>
     </el-aside>
