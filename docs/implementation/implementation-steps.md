@@ -88,13 +88,13 @@
 
 **Router 注册：** `backend/app/main.py` 已挂载 `app_config`、`user_favorite`、`announcements` 三个 router。
 
-### 11.2 Batch B：系统设置（Day 1 完成）+ 智能问答配置（Day 2 完成）+ 对话管理 🔄 进行中
+### 11.2 Batch B：系统设置（Day 1 完成）+ 智能问答配置（Day 2 完成）+ 对话管理（Day 3 完成）
 
 | 页面 | 路由 | 后端 API | 工作量 | 状态 |
 |------|------|----------|--------|------|
 | 系统设置 | `/admin/settings` | AppConfig CRUD ✅（复用 `/app-configs`） | ~1 天 | ✅ Day 1 完成 |
 | 智能问答配置 | `/admin/qa-config` | 复用 AppConfig（qa_ 前缀）✅ | ~1 天 | ✅ Day 2 完成 |
-| 对话管理 | `/admin/conversations` | 需后端扩展 | ~2-4 天 | ⏸️ 待后端就绪 |
+| 对话管理 | `/admin/conversations` | 新增 `/admin/conversations/*` ✅ | ~2 天 | ✅ Day 3 完成 |
 
 **系统设置页（Day 1）实现说明：**
 
@@ -135,12 +135,33 @@
 | `frontend/src/router/index.ts` | 补充注册 `/admin/qa-config` 路由 |
 | `frontend/src/views/admin/AdminLayout.vue` | 侧边栏新增「智能问答配置」菜单 |
 
-**后端待扩展：**
+**后端扩展：**
 
-| 端点 | 方法 | 路径 | 说明 |
-|------|------|------|------|
-| 管理端会话列表 | GET | `/api/v1/admin/conversations` | 跨用户查询 + 分页 + 筛选 |
-| 管理端强制删除 | DELETE | `/api/v1/admin/conversations/{id}` | 管理员强制删除任意会话 |
+| 端点 | 方法 | 路径 | 说明 | 状态 |
+|------|------|------|------|------|
+| 管理端会话列表 | GET | `/api/v1/admin/conversations` | 跨用户查询 + 分页 + 筛选 | ✅ 已完成 |
+| 管理端强制删除 | DELETE | `/api/v1/admin/conversations/{id}` | 管理员强制删除任意会话 | ✅ 已完成 |
+
+**对话管理页（Day 3）实现说明：**
+
+| 功能 | 实现 |
+|------|------|
+| 跨用户列表 | 管理端 `/admin/conversations`，支持关键词（标题/用户名）和状态筛选 |
+| 摘要预览 | 列表展示最近一条用户提问前 120 字 |
+| 详情弹窗 | 点击"详情"展示完整问答消息列表 |
+| 强制删除 | 管理员可硬删除任意会话（级联删除消息 + 引用） |
+
+**Day 3 新增文件：**
+
+| 文件 | 说明 |
+|------|------|
+| `backend/app/routers/admin_conversations.py` | 管理端会话路由（列表/详情/强制删除） |
+| `backend/app/services/qa_service.py` | 新增 `force_delete_conversation()` 硬删除 |
+| `backend/app/main.py` | 注册 `admin_conversations` router |
+| `frontend/src/api/conversations.ts` | 管理端会话 API（adminList/adminGet/adminDelete） |
+| `frontend/src/views/admin/ConversationsView.vue` | 对话管理页面 |
+| `frontend/src/router/index.ts` | 注册 `/admin/conversations` 路由 |
+| `frontend/src/views/admin/AdminLayout.vue` | 侧边栏新增「对话管理」菜单 |
 
 ### 11.3 Batch C：新领域模型 ⏸️ 待规划
 

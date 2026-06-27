@@ -75,7 +75,7 @@
 |------|------|----------|--------|------|
 | 系统设置 | `/admin/settings` | AppConfig CRUD ✅ | ~1 天 | 🔄 进行中（Day 1 完成） |
 | 智能问答配置 | `/admin/qa-config` | 复用 AppConfig（qa_ 前缀）✅ | ~1 天 | ✅ Day 2 完成 |
-| 对话管理 | `/admin/conversations` | 需后端扩展 | ~2-4 天 | ⏸️ 待后端就绪 |
+| 对话管理 | `/admin/conversations` | 新增 `/admin/conversations/*` ✅ | ~2 天 | ✅ Day 3 完成 |
 
 **Batch B 关键决策：**
 
@@ -127,13 +127,26 @@
 | `frontend/src/router/index.ts` | 注册 `/admin/qa-config` 路由 |
 | `frontend/src/views/admin/AdminLayout.vue` | 侧边栏新增「智能问答配置」菜单 |
 
-**操作记录（续）：**
+**对话管理页（Day 3）实现说明：**
 
-| 操作 | 时间 | 文件 | 说明 |
-|------|------|------|------|
-| 11-9 | 2026-06-27 | `frontend/src/views/admin/QaConfigView.vue` | 创建智能问答配置页 |
-| 11-10 | 2026-06-27 | `frontend/src/router/index.ts` | 注册 qa-config 路由 |
-| 11-11 | 2026-06-27 | `frontend/src/views/admin/AdminLayout.vue` | 添加「智能问答配置」侧边栏菜单 |
+| 功能 | 实现 |
+|------|------|
+| 跨用户列表 | 管理端 `/admin/conversations`，支持关键词（标题/用户名）和状态筛选 |
+| 摘要预览 | 列表展示最近一条用户提问前 120 字 |
+| 详情弹窗 | 点击"详情"展示完整问答消息列表 |
+| 强制删除 | 管理员可硬删除任意会话（级联删除消息 + 引用） |
+
+**Day 3 新增文件：**
+
+| 文件 | 说明 |
+|------|------|
+| `backend/app/routers/admin_conversations.py` | 管理端会话路由（列表/详情/强制删除） |
+| `backend/app/services/qa_service.py` | 新增 `force_delete_conversation()` 硬删除 |
+| `backend/app/main.py` | 注册 `admin_conversations` router |
+| `frontend/src/api/conversations.ts` | 管理端会话 API（adminList/adminGet/adminDelete） |
+| `frontend/src/views/admin/ConversationsView.vue` | 对话管理页面 |
+| `frontend/src/router/index.ts` | 注册 `/admin/conversations` 路由 |
+| `frontend/src/views/admin/AdminLayout.vue` | 侧边栏新增「对话管理」菜单 |
 
 **操作记录：**
 
@@ -144,6 +157,15 @@
 | 11-6 | 2026-06-27 | `frontend/src/views/admin/SettingsView.vue` | 创建系统设置页面 |
 | 11-7 | 2026-06-27 | `frontend/src/router/index.ts` | 注册 settings 路由 |
 | 11-8 | 2026-06-27 | `frontend/src/views/admin/AdminLayout.vue` | 添加「系统设置」侧边栏菜单 |
+| 11-9 | 2026-06-27 | `frontend/src/views/admin/QaConfigView.vue` | 创建智能问答配置页 |
+| 11-10 | 2026-06-27 | `frontend/src/router/index.ts` | 注册 qa-config 路由 |
+| 11-11 | 2026-06-27 | `frontend/src/views/admin/AdminLayout.vue` | 添加「智能问答配置」侧边栏菜单 |
+| 11-12 | 2026-06-27 | `backend/app/routers/admin_conversations.py` | 创建管理端会话路由 |
+| 11-13 | 2026-06-27 | `backend/app/services/qa_service.py` | 新增 `force_delete_conversation()` |
+| 11-14 | 2026-06-27 | `backend/app/main.py` | 注册 admin_conversations router |
+| 11-15 | 2026-06-27 | `frontend/src/api/conversations.ts` | 创建管理端会话 API |
+| 11-16 | 2026-06-27 | `frontend/src/views/admin/ConversationsView.vue` | 创建对话管理页面 |
+| 11-17 | 2026-06-27 | `frontend/src/views/admin/AdminLayout.vue` | 添加「对话管理」侧边栏菜单 |
 
 ### Batch C（待排期）：新领域模型
 
