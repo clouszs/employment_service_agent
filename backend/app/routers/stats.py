@@ -8,6 +8,7 @@ from app.core.deps import require_roles
 from app.core.response import success
 from app.models import SysUser
 from app.services import ops_service as svc
+from app.services import user_service
 
 router = APIRouter(prefix="/stats", tags=["运营-统计"])
 
@@ -59,6 +60,7 @@ def activity(
 def employment(
     department: str | None = Query(None, description="院系筛选(仅教师/管理员)"),
     grade: str | None = Query(None, description="年级筛选(仅教师/管理员)"),
+    db: Session = Depends(get_db),
     current_user: SysUser = Depends(require_roles("admin", "editor", "student")),
 ) -> dict:
     """就业数据统计 - 学生看全局聚合,教师可按院系/年级筛选。
@@ -66,8 +68,8 @@ def employment(
     返回维度: 就业率趋势(按年份) + 行业分布 + 薪资分布 + 地域分布
     """
     # 学生无筛选权限,忽略筛选参数
-    user_roles = {r.role_code for r in current_user.roles}
-    if "admin" not in user_roles and "editor" not in user_roles:
+    role_codes = {r.role_code for r in user_service.list_user_roles(db, current_user.id)}
+    if "admin" not in role_codes and "editor" not in role_codes:
         department = None
         grade = None
 
