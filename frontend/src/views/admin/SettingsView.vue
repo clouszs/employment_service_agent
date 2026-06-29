@@ -262,12 +262,12 @@ onMounted(loadAll)
 .page-header h2 {
   margin: 0 0 4px;
   font-size: 20px;
-  color: #e2e8f0;
+  color: #1f2937;
 }
 .subtitle {
   margin: 0;
   font-size: 13px;
-  color: #94a3b8;
+  color: #6b7280;
 }
 .toolbar {
   display: flex;
@@ -280,8 +280,8 @@ onMounted(loadAll)
   color: #fbbf24;
 }
 .group-tabs {
-  background: #0f1a2e;
-  border: 1px solid #1e2d4a;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
 }
 .tab-label {
   font-size: 14px;
@@ -309,12 +309,12 @@ onMounted(loadAll)
   background: rgba(59, 130, 246, 0.05);
 }
 .empty-hint {
-  color: #64748b;
+  color: #6b7280;
   font-style: italic;
 }
 .masked-value {
   font-family: monospace;
-  color: #94a3b8;
+  color: #6b7280;
   user-select: none;
 }
 .lock-icon {
@@ -324,12 +324,12 @@ onMounted(loadAll)
 }
 .desc-cell {
   cursor: pointer;
-  color: #cbd5e1;
+  color: #6b7280;
   font-size: 13px;
 }
 .empty-group {
   text-align: center;
-  color: #64748b;
+  color: #6b7280;
   padding: 40px 0;
   font-size: 14px;
 }

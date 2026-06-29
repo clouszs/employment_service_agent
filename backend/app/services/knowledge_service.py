@@ -240,6 +240,23 @@ def update_faq(db: Session, faq: KbFaq, data: FaqUpdate) -> KbFaq:
     return faq
 
 
+def set_faq_status(db: Session, faq: KbFaq, status: int) -> KbFaq:
+    """仅切换 FAQ 启用状态（轻量，不改动问题/答案文本）。
+
+    同步维护向量：启用→重建可检索向量；禁用→移除向量。
+    这样重新启用的 FAQ 仍可被检索命中，避免“启用后搜不到”的问题。
+    """
+    new_status = 1 if status else 0
+    faq.status = new_status
+    db.commit()
+    db.refresh(faq)
+    if new_status == 0:
+        _remove_faq_vector(faq.id)
+    else:
+        _index_faq(db, faq)
+    return faq
+
+
 def delete_faq(db: Session, faq: KbFaq) -> None:
     _remove_faq_vector(faq.id)
     db.delete(faq)

@@ -245,7 +245,7 @@ function barHeight(v: number): string {
 }
 .trend-label {
   font-size: 12px;
-  color: #94a3b8;
+  color: #6b7280;
 }
 .toolbar {
   display: flex;

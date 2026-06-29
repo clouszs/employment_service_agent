@@ -91,8 +91,10 @@ function onLogout() {
         </div>
       </el-header>
 
-      <el-main class="main">
-        <router-view />
+      <el-main class="main light-content">
+        <div class="content-wrapper">
+          <router-view />
+        </div>
       </el-main>
     </el-container>
   </el-container>
@@ -177,5 +179,12 @@ function onLogout() {
 .main {
   background: #f5f7fa;
   padding: 20px;
+}
+.main.light-content {
+  background: #f5f7fa;
+}
+.content-wrapper {
+  max-width: 1400px;
+  margin: 0 auto;
 }
 </style>

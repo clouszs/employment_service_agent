@@ -55,9 +55,9 @@ def route_query(state: dict) -> dict:
       - policy_query：政策法规类 → search_knowledge（Bing 政务站）
       - faq_query：常见问题类 → search_knowledge（FAQ 优先）
       - document_query：文档查询类 → search_knowledge（文档检索）
-      - news_query：新闻资讯类 → search_knowledge（Bing 新闻）
-      - resume_query：简历相关 → search_knowledge + generate_resume 工具
-      - interview_query：面试相关 → search_knowledge + add_calendar_event 工具
+      - news_query：新闻资讯类 → direct_response（读取生效公告）
+      - resume_query：简历相关 → search_knowledge（招聘站白名单）
+      - interview_query：面试相关 → search_knowledge（招聘站白名单）
       - salary_query：薪资待遇 → search_knowledge（薪资类 KB）
       - kb_query：兜底就业知识类 → search_knowledge（本地优先）
 
@@ -687,10 +687,9 @@ def direct_response(state: dict) -> dict:
 
     # 轻量工具调用：公告查询（不需要检索）
     if intent == "news_query":
-        from app.agent.tools import fetch_announcement
+        from app.services.announcement_service import get_active_config_announcements
 
-        result = fetch_announcement(query=query, max_results=5)
-        announcements = result.get("announcements", [])
+        announcements = get_active_config_announcements(query=query, max_results=5)
         if announcements:
             lines = ["📢 最新公告："]
             for a in announcements:

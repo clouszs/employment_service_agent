@@ -4,6 +4,7 @@ from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -11,7 +12,12 @@ from app.core.deps import require_roles
 from app.core.response import success
 from app.models import LlmCostLog, SysUser
 from app.monitor.cost_monitor import LlmCostMonitor
-from app.schemas.monitor import LlmCostDailyRead, LlmCostMonthlyRead, LlmCostLogRead
+from app.schemas.monitor import (
+    LlmCostDailyRead,
+    LlmCostLogRead,
+    LlmCostMonthlyRead,
+    LlmCostMonthlySourceRead,
+)
 
 router = APIRouter(prefix="/llm-cost", tags=["监控-LLM成本"])
 
@@ -36,29 +42,53 @@ def daily(
         monitor = LlmCostMonitor(db)
         monitor.run_daily_check(target)
 
-    # 查询该日期的聚合数据
+    # 查询该日期的聚合数据（跨 source 按 model 汇总，保持单模型一行）
     rows = (
         db.query(
-            LlmCostLog.stat_date,
             LlmCostLog.model,
-            LlmCostLog.call_count,
-            LlmCostLog.tokens_in,
-            LlmCostLog.tokens_out,
-            LlmCostLog.cost_usd,
+            func.sum(LlmCostLog.call_count).label("call_count"),
+            func.sum(LlmCostLog.tokens_in).label("tokens_in"),
+            func.sum(LlmCostLog.tokens_out).label("tokens_out"),
+            func.sum(LlmCostLog.cost_usd).label("cost_usd"),
         )
         .filter(LlmCostLog.stat_date == target)
+        .group_by(LlmCostLog.model)
         .all()
     )
 
     models = [
         {
             "model": r.model,
-            "call_count": r.call_count,
-            "tokens_in": r.tokens_in,
-            "tokens_out": r.tokens_out,
-            "cost_usd": round(float(r.cost_usd), 4),
+            "call_count": int(r.call_count or 0),
+            "tokens_in": int(r.tokens_in or 0),
+            "tokens_out": int(r.tokens_out or 0),
+            "cost_usd": round(float(r.cost_usd or 0), 4),
         }
         for r in rows
+    ]
+
+    # 当日按来源拆分
+    src_rows = (
+        db.query(
+            LlmCostLog.source,
+            func.sum(LlmCostLog.call_count).label("call_count"),
+            func.sum(LlmCostLog.tokens_in).label("tokens_in"),
+            func.sum(LlmCostLog.tokens_out).label("tokens_out"),
+            func.sum(LlmCostLog.cost_usd).label("cost_usd"),
+        )
+        .filter(LlmCostLog.stat_date == target)
+        .group_by(LlmCostLog.source)
+        .all()
+    )
+    sources = [
+        {
+            "source": r.source,
+            "call_count": int(r.call_count or 0),
+            "tokens_in": int(r.tokens_in or 0),
+            "tokens_out": int(r.tokens_out or 0),
+            "cost_usd": round(float(r.cost_usd or 0), 4),
+        }
+        for r in src_rows
     ]
 
     result = LlmCostDailyRead(
@@ -68,6 +98,7 @@ def daily(
         total_tokens_in=sum(m["tokens_in"] for m in models),
         total_tokens_out=sum(m["tokens_out"] for m in models),
         models=models,
+        sources=sources,
     )
     return success(result.model_dump())
 
@@ -76,17 +107,37 @@ def daily(
 def monthly(
     year: int = Query(..., ge=2000, le=2100, description="年份"),
     month: int = Query(..., ge=1, le=12, description="月份"),
+    source: Optional[str] = Query(None, description="按来源筛选(agent_chat/resume_generation)，默认全部"),
     db: Session = Depends(get_db),
     _: SysUser = Depends(require_roles("admin", "editor")),
 ) -> dict:
-    """获取指定月份的 LLM 成本汇总（按模型拆分）。"""
+    """获取指定月份的 LLM 成本汇总（按模型拆分）。source 缺省时跨来源汇总（前端零改动）。"""
     monitor = LlmCostMonitor(db)
-    report = monitor.get_monthly_cost(year, month)
+    report = monitor.get_monthly_cost(year, month, source=source)
     result = LlmCostMonthlyRead(
         year=report["year"],
         month=report["month"],
         total_cost_usd=report["total_cost_usd"],
         models=report["models"],
+    )
+    return success(result.model_dump())
+
+
+@router.get("/monthly/by-source", summary="LLM 月度成本按来源拆分")
+def monthly_by_source(
+    year: int = Query(..., ge=2000, le=2100, description="年份"),
+    month: int = Query(..., ge=1, le=12, description="月份"),
+    db: Session = Depends(get_db),
+    _: SysUser = Depends(require_roles("admin", "editor")),
+) -> dict:
+    """获取指定月份按来源(agent_chat / resume_generation ...)拆分的成本。"""
+    monitor = LlmCostMonitor(db)
+    report = monitor.get_monthly_source_breakdown(year, month)
+    result = LlmCostMonthlySourceRead(
+        year=report["year"],
+        month=report["month"],
+        total_cost_usd=report["total_cost_usd"],
+        sources=report["sources"],
     )
     return success(result.model_dump())
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -39,5 +41,5 @@ class AppConfigRead(AppConfigBase):
 
     id: int = Field(description="主键")
     updated_by: int | None = Field(default=None, description="最后修改人ID")
-    created_at: str | None = Field(default=None, description="创建时间")
-    updated_at: str | None = Field(default=None, description="更新时间")
+    created_at: datetime | None = Field(default=None, description="创建时间")
+    updated_at: datetime | None = Field(default=None, description="更新时间")

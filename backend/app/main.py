@@ -26,6 +26,7 @@ from app.routers import (
     app_config,
     announcements,
     auth,
+    career,
     categories,
     conversations,
     documents,
@@ -162,6 +163,8 @@ app.include_router(app_config.router, prefix=settings.api_prefix)
 app.include_router(user_favorite.router, prefix=settings.api_prefix)
 app.include_router(announcements.router, prefix=settings.api_prefix)
 app.include_router(admin_conversations.router, prefix=settings.api_prefix)
+# 学生生涯服务：简历/职位/日历
+app.include_router(career.router, prefix=settings.api_prefix)
 
 
 @app.get("/")

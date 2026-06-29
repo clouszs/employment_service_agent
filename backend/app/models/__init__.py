@@ -31,6 +31,7 @@ from app.models.user import SysRole, SysUser, SysUserRole
 from app.models.app_config import AppConfig
 from app.models.user_favorite import UserFavorite
 from app.models.announcement import Announcement
+from app.models.llm_usage import LlmUsage, LlmUsageSource
 
 __all__ = [
     "Base",
@@ -65,4 +66,6 @@ __all__ = [
   "AppConfig",
   "UserFavorite",
   "Announcement",
+    "LlmUsage",
+    "LlmUsageSource",
 ]

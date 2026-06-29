@@ -56,12 +56,32 @@ class LlmCostLogRead(ORMModel):
     id: int
     stat_date: date
     model: str
+    source: str
     call_count: int
     tokens_in: int
     tokens_out: int
     cost_usd: float
     created_at: datetime
     updated_at: datetime
+
+
+class LlmCostSourceBreakdown(BaseModel):
+    """按来源拆分的成本项。"""
+
+    source: str = Field(description="来源(agent_chat/resume_generation...)")
+    call_count: int = Field(description="调用次数")
+    tokens_in: int = Field(description="输入 token")
+    tokens_out: int = Field(description="输出 token")
+    cost_usd: float = Field(description="成本(USD)")
+
+
+class LlmCostMonthlySourceRead(BaseModel):
+    """单月成本按来源拆分。"""
+
+    year: int = Field(description="年份")
+    month: int = Field(description="月份")
+    total_cost_usd: float = Field(description="当月总成本(USD)")
+    sources: list[LlmCostSourceBreakdown] = Field(default_factory=list, description="按来源拆分")
 
 
 class LlmCostDailyRead(BaseModel):
@@ -73,6 +93,7 @@ class LlmCostDailyRead(BaseModel):
     total_tokens_in: int = Field(description="当日总输入 token")
     total_tokens_out: int = Field(description="当日总输出 token")
     models: list[dict] = Field(default_factory=list, description="按模型拆分")
+    sources: list[LlmCostSourceBreakdown] = Field(default_factory=list, description="按来源拆分")
 
 
 class LlmCostMonthlyRead(BaseModel):

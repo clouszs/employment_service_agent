@@ -10,8 +10,6 @@ const expanded = ref(false)
 const hasWeb = computed(() => props.references.some((r) => r.source_type === 'web'))
 const localRefs = computed(() => props.references.filter((r) => r.source_type !== 'web'))
 const webRefs = computed(() => props.references.filter((r) => r.source_type === 'web'))
-
-const displayRefs = computed(() => (expanded.value ? props.references : props.references.slice(0, 3)))
 const hasMore = computed(() => props.references.length > 3)
 
 function toggle() {

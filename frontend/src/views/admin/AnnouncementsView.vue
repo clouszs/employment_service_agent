@@ -278,18 +278,18 @@ onMounted(load)
 .page-header h2 {
   margin: 0;
   font-size: 20px;
-  color: #e2e8f0;
+  color: #1f2937;
 }
 .filter-card {
   margin-bottom: 16px;
-  border: 1px solid #1e2d4a;
-  background: #0f1a2e;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
 }
 .filter-form :deep(.el-form-item__label) {
-  color: #94a3b8;
+  color: #374151;
 }
 .filter-form :deep(.el-input__wrapper) {
-  background: #1a2744;
+  background: #ffffff;
   box-shadow: none;
 }
 .pagination-wrap {

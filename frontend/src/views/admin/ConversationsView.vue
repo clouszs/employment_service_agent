@@ -181,27 +181,27 @@ onMounted(load)
 .page-header h2 {
   margin: 0 0 4px;
   font-size: 20px;
-  color: #e2e8f0;
+  color: #1f2937;
 }
 .subtitle {
   margin: 0;
   font-size: 13px;
-  color: #94a3b8;
+  color: #6b7280;
 }
 .filter-card {
   margin-bottom: 16px;
-  border: 1px solid #1e2d4a;
-  background: #0f1a2e;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
 }
 .filter-form :deep(.el-form-item__label) {
-  color: #94a3b8;
+  color: #6b7280;
 }
 .filter-form :deep(.el-input__wrapper) {
-  background: #1a2744;
+  background: #f9fafb;
   box-shadow: none;
 }
 .snippet-text {
-  color: #cbd5e1;
+  color: #6b7280;
   font-size: 13px;
 }
 .pagination-wrap {
@@ -211,7 +211,7 @@ onMounted(load)
 }
 .empty-detail {
   text-align: center;
-  color: #64748b;
+  color: #6b7280;
   padding: 40px 0;
 }
 .message-list {
@@ -220,7 +220,7 @@ onMounted(load)
 }
 .message-item {
   padding: 12px 16px;
-  border-bottom: 1px solid #1e2d4a;
+  border-bottom: 1px solid #e5e7eb;
 }
 .message-item:last-child {
   border-bottom: none;
@@ -233,10 +233,10 @@ onMounted(load)
 }
 .message-time {
   font-size: 12px;
-  color: #64748b;
+  color: #6b7280;
 }
 .message-content {
-  color: #e2e8f0;
+  color: #1f2937;
   font-size: 14px;
   line-height: 1.6;
   white-space: pre-wrap;

@@ -150,6 +150,15 @@ class FaqUpdate(BaseModel):
     status: Optional[int] = None
 
 
+class FaqStatusUpdate(BaseModel):
+    status: int = Field(description="1启用 0禁用")
+
+
+class FaqBatchAction(BaseModel):
+    action: str = Field(description="enable / disable / delete")
+    ids: list[int] = Field(description="目标 FAQ ID 列表")
+
+
 class FaqRead(ORMModel):
     id: int
     question: str

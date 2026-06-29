@@ -1,4 +1,4 @@
-/* ==================== 全局深色主题变量 ==================== */
+/* ==================== 浅色内容区变量 ==================== */
 :root {
   --chat-bg-start: #0a0e27;
   --chat-bg-mid: #111837;
@@ -12,6 +12,24 @@
   --accent-blue: #4facfe;
   --accent-cyan: #00d4ff;
   --accent-glow: rgba(56, 189, 248, 0.35);
+
+  /* 浅色内容区 */
+  --content-bg: #f5f7fa;
+  --card-bg: #ffffff;
+  --card-border: #e5e7eb;
+  --text-dark: #1f2937;
+  --text-dark-secondary: #6b7280;
+  --text-dark-muted: #9ca3af;
+  --table-header-bg: #f3f4f6;
+  --table-row-hover: #f9fafb;
+  --table-stripe: #fafafa;
+  --input-bg: #ffffff;
+  --input-border: #d1d5db;
+  --primary-gradient: linear-gradient(135deg, #4facfe, #00d4ff);
+  --success-color: #10b981;
+  --warning-color: #f59e0b;
+  --danger-color: #ef4444;
+  --info-color: #3b82f6;
 }
 
 /* ==================== 全局基础 ==================== */
@@ -123,4 +141,158 @@ body {
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+}
+
+/* ==================== 浅色内容区覆盖（管理端/教师端/学生端） ==================== */
+.light-content,
+.student-layout .main,
+.teacher-layout .light-content {
+  background: #f5f7fa;
+  min-height: 100%;
+}
+
+/* 浅色区内的 Element Plus 组件 */
+.light-content .el-card,
+.light-content .el-dialog,
+.light-content .el-drawer,
+.light-content .el-table,
+.light-content .el-input__wrapper,
+.light-content .el-textarea__inner,
+.light-content .el-select-dropdown,
+.light-content .el-message-box {
+  --el-bg-color: #ffffff;
+  --el-text-color-primary: #1f2937;
+  --el-text-color-regular: #374151;
+  --el-text-color-secondary: #6b7280;
+  --el-border-color: #e5e7eb;
+  --el-fill-color-blank: #ffffff;
+  --el-fill-color-light: #f3f4f6;
+  background: #ffffff !important;
+  color: #1f2937;
+}
+
+.light-content .el-card {
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.light-content .el-table {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+}
+.light-content .el-table th {
+  background: #f9fafb;
+  color: #374151;
+  font-weight: 600;
+}
+.light-content .el-table td {
+  color: #1f2937;
+}
+.light-content .el-table--striped .el-table__body tr.el-table__row--striped td {
+  background: #fafafa;
+}
+.light-content .el-table__body tr:hover > td {
+  background: #f3f4f6 !important;
+}
+
+.light-content .el-input__wrapper,
+.light-content .el-textarea__inner {
+  background: #ffffff !important;
+  border: 1px solid #d1d5db !important;
+  color: #1f2937 !important;
+}
+.light-content .el-input__inner,
+.light-content .el-textarea__inner {
+  color: #1f2937 !important;
+}
+.light-content .el-input__inner::placeholder,
+.light-content .el-textarea__inner::placeholder {
+  color: #9ca3af !important;
+}
+
+.light-content .el-button--default {
+  --el-button-bg-color: #ffffff;
+  --el-button-border-color: #d1d5db;
+  --el-button-text-color: #374151;
+  --el-button-hover-text-color: #4facfe;
+}
+.light-content .el-button--primary {
+  --el-button-bg-color: linear-gradient(135deg, #4facfe, #00d4ff);
+  --el-button-border-color: transparent;
+  --el-button-text-color: #0a0e27;
+}
+.light-content .el-button--danger {
+  --el-button-bg-color: #fee2e2;
+  --el-button-border-color: #fecaca;
+  --el-button-text-color: #dc2626;
+}
+
+.light-content .el-tag--success {
+  --el-tag-bg-color: #d1fae5;
+  --el-tag-border-color: #a7f3d0;
+  --el-tag-text-color: #065f46;
+}
+.light-content .el-tag--warning {
+  --el-tag-bg-color: #fef3c7;
+  --el-tag-border-color: #fde68a;
+  --el-tag-text-color: #92400e;
+}
+.light-content .el-tag--danger {
+  --el-tag-bg-color: #fee2e2;
+  --el-tag-border-color: #fecaca;
+  --el-tag-text-color: #dc2626;
+}
+.light-content .el-tag--info {
+  --el-tag-bg-color: #dbeafe;
+  --el-tag-border-color: #bfdbfe;
+  --el-tag-text-color: #1e40af;
+}
+
+.light-content .el-pagination {
+  --el-pagination-bg-color: #ffffff;
+  --el-pagination-text-color: #374151;
+}
+.light-content .el-pagination button {
+  background-color: #ffffff;
+}
+.light-content .el-pagination .el-pager li {
+  background-color: #ffffff;
+  color: #374151;
+}
+.light-content .el-pagination .el-pager li.is-active {
+  background-color: #4facfe;
+  color: #ffffff;
+}
+
+.light-content .el-dialog {
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+}
+.light-content .el-dialog__header {
+  border-bottom: 1px solid #e5e7eb;
+  padding: 16px 20px;
+}
+.light-content .el-dialog__title {
+  color: #1f2937;
+  font-weight: 600;
+}
+.light-content .el-dialog__body {
+  color: #374151;
+  padding: 20px;
+}
+
+.light-content .el-descriptions {
+  background: #ffffff;
+}
+.light-content .el-descriptions__label {
+  background: #f9fafb;
+  color: #6b7280;
+  font-weight: 600;
+}
+.light-content .el-descriptions__content {
+  color: #1f2937;
+}
+
+.light-content .el-divider {
+  border-color: #e5e7eb;
 }

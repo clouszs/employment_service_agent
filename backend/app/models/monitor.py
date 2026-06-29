@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Optional
 
-from sqlalchemy import BIGINT, Date, DateTime, Integer, Numeric, String, func
+from sqlalchemy import BIGINT, Date, DateTime, Integer, Numeric, String, UniqueConstraint, func
 from sqlalchemy.dialects.mysql import BIGINT as MYSQL_BIGINT
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -33,11 +33,18 @@ class LlmCostLog(Base):
     """LLM 成本日志表：按天 + 模型聚合。"""
 
     __tablename__ = "llm_cost_log"
-    __table_args__ = {"comment": "LLM成本日志：按天+模型聚合", **TABLE_ARGS}
+    __table_args__ = (
+        # 聚合唯一性：每天每模型每来源一行（替代原 (stat_date, model) 逻辑唯一）
+        UniqueConstraint("stat_date", "model", "source", name="uq_llm_cost_date_model_source"),
+        {"comment": "LLM成本日志：按天+模型+来源聚合", **TABLE_ARGS},
+    )
 
     id: Mapped[int] = mapped_column(MYSQL_BIGINT(unsigned=True), autoincrement=True, primary_key=True, comment="主键")
     stat_date: Mapped[date] = mapped_column(Date, nullable=False, comment="统计日期")
     model: Mapped[str] = mapped_column(String(64), nullable=False, comment="模型名")
+    source: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="agent_chat", comment="来源(agent_chat/resume_generation...)"
+    )
     call_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", comment="调用次数")
     tokens_in: Mapped[int] = mapped_column(MYSQL_BIGINT(unsigned=True), nullable=False, server_default="0", comment="输入token累计")
     tokens_out: Mapped[int] = mapped_column(MYSQL_BIGINT(unsigned=True), nullable=False, server_default="0", comment="输出token累计")
