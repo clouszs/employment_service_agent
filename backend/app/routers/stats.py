@@ -27,3 +27,48 @@ def hot_questions(
     _: SysUser = Depends(require_roles("admin", "editor")),
 ) -> dict:
     return success(svc.hot_questions(db, limit))
+
+
+@router.get("/daily", summary="仪表盘日维度KPI(只读聚合)")
+def daily(
+    db: Session = Depends(get_db),
+    _: SysUser = Depends(require_roles("admin", "editor")),
+) -> dict:
+    return success(svc.stats_daily(db))
+
+
+@router.get("/trend", summary="对话趋势-最近N天每日提问数(只读聚合)")
+def trend(
+    days: int = Query(14, ge=2, le=60),
+    db: Session = Depends(get_db),
+    _: SysUser = Depends(require_roles("admin", "editor")),
+) -> dict:
+    return success(svc.stats_trend(db, days))
+
+
+@router.get("/activity", summary="最近活动时间线(聚合现有表近期事件)")
+def activity(
+    limit: int = Query(8, ge=1, le=20),
+    db: Session = Depends(get_db),
+    _: SysUser = Depends(require_roles("admin", "editor")),
+) -> dict:
+    return success(svc.recent_activity(db, limit))
+
+
+@router.get("/employment", summary="就业数据统计(学生可读,教师可筛选)")
+def employment(
+    department: str | None = Query(None, description="院系筛选(仅教师/管理员)"),
+    grade: str | None = Query(None, description="年级筛选(仅教师/管理员)"),
+    current_user: SysUser = Depends(require_roles("admin", "editor", "student")),
+) -> dict:
+    """就业数据统计 - 学生看全局聚合,教师可按院系/年级筛选。
+
+    返回维度: 就业率趋势(按年份) + 行业分布 + 薪资分布 + 地域分布
+    """
+    # 学生无筛选权限,忽略筛选参数
+    user_roles = {r.role_code for r in current_user.roles}
+    if "admin" not in user_roles and "editor" not in user_roles:
+        department = None
+        grade = None
+
+    return success(svc.stats_employment(department, grade))

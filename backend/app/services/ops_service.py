@@ -2,7 +2,7 @@
 
 import re
 import time
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 from sqlalchemy import func, select
@@ -11,12 +11,14 @@ from sqlalchemy.orm import Session
 import hashlib
 
 from app.models import (
+    Announcement,
     KbDocument,
     KbFaq,
     OpEvalCase,
     OpQueryLog,
     OpSensitiveWord,
     OpUnansweredQuestion,
+    QaConversation,
     QaFeedback,
     QaMessage,
 )
@@ -212,6 +214,92 @@ def hot_questions(db: Session, limit: int = 10) -> list[dict]:
     return [{"faq_id": r[0], "question": r[1], "hit_count": r[2]} for r in rows]
 
 
+def recent_activity(db: Session, limit: int = 8) -> list[dict]:
+    """最近活动时间线：聚合现有表的近期事件（FAQ新增/文档/公告/反馈），不新建表。"""
+    events: list[dict] = []
+
+    for f in db.query(KbFaq).order_by(KbFaq.created_at.desc()).limit(limit).all():
+        events.append({"type": "faq", "level": "success", "desc": f"新增 FAQ「{(f.question or '')[:24]}」", "time": f.created_at})
+    for d in db.query(KbDocument).order_by(KbDocument.created_at.desc()).limit(limit).all():
+        events.append({"type": "document", "level": "info", "desc": f"知识库文档「{(d.title or '')[:24]}」", "time": d.created_at})
+    for a in db.query(Announcement).order_by(Announcement.created_at.desc()).limit(limit).all():
+        events.append({"type": "announcement", "level": "warning", "desc": f"发布公告「{(a.title or '')[:24]}」", "time": a.created_at})
+    for fb in db.query(QaFeedback).order_by(QaFeedback.created_at.desc()).limit(limit).all():
+        liked = fb.rating == 1
+        events.append({"type": "feedback", "level": "success" if liked else "error",
+                       "desc": "用户对回答点赞" if liked else "用户对回答点踩", "time": fb.created_at})
+
+    events = [e for e in events if e["time"] is not None]
+    events.sort(key=lambda e: e["time"], reverse=True)
+    return [
+        {"type": e["type"], "level": e["level"], "desc": e["desc"], "created_at": e["time"].isoformat()}
+        for e in events[:limit]
+    ]
+
+
+def stats_daily(db: Session) -> dict:
+    """仪表盘日维度 KPI（只读聚合）：今日提问数 / 今日活跃用户 / 今日平均响应时延 / FAQ命中率。"""
+    today_start = datetime(date.today().year, date.today().month, date.today().day)
+
+    today_questions = db.scalar(
+        select(func.count())
+        .select_from(QaMessage)
+        .where(QaMessage.role == 1, QaMessage.created_at >= today_start)
+    ) or 0
+
+    # 今日活跃用户：今日有提问的会话所属用户去重
+    active_users = db.scalar(
+        select(func.count(func.distinct(QaConversation.user_id)))
+        .select_from(QaMessage)
+        .join(QaConversation, QaConversation.id == QaMessage.conversation_id)
+        .where(QaMessage.role == 1, QaMessage.created_at >= today_start)
+    ) or 0
+
+    avg_latency = db.scalar(
+        select(func.avg(QaMessage.latency_ms)).where(
+            QaMessage.role == 2,
+            QaMessage.created_at >= today_start,
+            QaMessage.latency_ms.isnot(None),
+        )
+    )
+
+    total_answers = db.scalar(
+        select(func.count()).select_from(QaMessage).where(QaMessage.role == 2)
+    ) or 0
+    faq_answers = db.scalar(
+        select(func.count())
+        .select_from(QaMessage)
+        .where(QaMessage.role == 2, QaMessage.answer_type == 2)
+    ) or 0
+
+    return {
+        "today_questions": int(today_questions),
+        "active_users": int(active_users),
+        "avg_latency_ms": round(float(avg_latency)) if avg_latency is not None else None,
+        "faq_hit_rate": round(faq_answers / total_answers, 4) if total_answers else 0.0,
+    }
+
+
+def stats_trend(db: Session, days: int = 14) -> list[dict]:
+    """对话趋势（只读聚合）：最近 N 天每日提问数，缺失日期补 0。"""
+    start_day = date.today() - timedelta(days=days - 1)
+    start_dt = datetime(start_day.year, start_day.month, start_day.day)
+
+    rows = db.execute(
+        select(func.date(QaMessage.created_at), func.count())
+        .where(QaMessage.role == 1, QaMessage.created_at >= start_dt)
+        .group_by(func.date(QaMessage.created_at))
+    ).all()
+    counts: dict[str, int] = {str(r[0]): int(r[1]) for r in rows}
+
+    result: list[dict] = []
+    for i in range(days):
+        d = start_day + timedelta(days=i)
+        key = d.isoformat()
+        result.append({"date": key, "count": counts.get(key, 0)})
+    return result
+
+
 # ==================== 评测集 ====================
 def list_eval_cases(
     db: Session, offset: int, limit: int, category: Optional[str] = None, status: Optional[int] = None
@@ -388,3 +476,56 @@ def resolve_unanswered(db: Session, obj: OpUnansweredQuestion, status: int, note
 def delete_unanswered(db: Session, obj: OpUnansweredQuestion) -> None:
     db.delete(obj)
     db.commit()
+
+
+# ==================== 就业数据统计 ====================
+
+
+def stats_employment(department: str | None = None, grade: str | None = None) -> dict:
+    """就业数据统计(Mock数据) - 学生看全局,教师可按院系/年级筛选。
+
+    返回维度: 就业率趋势 + 行业分布 + 薪资分布 + 地域分布
+    """
+    # 基础全局数据
+    base_data = {
+        "employment_trend": [
+            {"year": "2021", "rate": 92.3},
+            {"year": "2022", "rate": 93.8},
+            {"year": "2023", "rate": 94.5},
+            {"year": "2024", "rate": 95.2},
+        ],
+        "industry_distribution": [
+            {"industry": "互联网", "count": 350, "percentage": 35.0},
+            {"industry": "金融", "count": 200, "percentage": 20.0},
+            {"industry": "制造业", "count": 150, "percentage": 15.0},
+            {"industry": "教育", "count": 120, "percentage": 12.0},
+            {"industry": "其他", "count": 180, "percentage": 18.0},
+        ],
+        "salary_distribution": [
+            {"range": "5-8k", "count": 180},
+            {"range": "8-12k", "count": 350},
+            {"range": "12-20k", "count": 280},
+            {"range": "20-30k", "count": 120},
+            {"range": "30k+", "count": 70},
+        ],
+        "region_distribution": [
+            {"region": "北京", "count": 220},
+            {"region": "上海", "count": 200},
+            {"region": "深圳", "count": 180},
+            {"region": "杭州", "count": 150},
+            {"region": "广州", "count": 120},
+            {"region": "其他", "count": 130},
+        ],
+    }
+
+    # 教师筛选时调整数据(示例:按比例缩放)
+    if department or grade:
+        scale = 0.3 if department == "计算机学院" else 0.5
+        for item in base_data["industry_distribution"]:
+            item["count"] = int(item["count"] * scale)
+        for item in base_data["salary_distribution"]:
+            item["count"] = int(item["count"] * scale)
+        for item in base_data["region_distribution"]:
+            item["count"] = int(item["count"] * scale)
+
+    return base_data

@@ -85,6 +85,21 @@ def list_conversations(
     )
 
 
+@router.get("/history", summary="会话历史(富信息卡片+KPI，只读聚合)")
+def conversation_history(
+    page: int = Query(1, ge=1),
+    size: int = Query(12, ge=1, le=60),
+    keyword: str | None = Query(None, description="按标题搜索"),
+    sort: str = Query("recent", pattern="^(recent|messages|confidence)$"),
+    db: Session = Depends(get_db),
+    current: SysUser = Depends(get_current_user),
+) -> dict:
+    items, total, kpi = svc.get_conversation_history(
+        db, current.id, (page - 1) * size, size, keyword=keyword, sort=sort
+    )
+    return success({"total": total, "page": page, "size": size, "items": items, "kpi": kpi})
+
+
 @router.post("", summary="新建会话", status_code=status.HTTP_201_CREATED)
 def create_conversation(
     payload: ConversationCreate,

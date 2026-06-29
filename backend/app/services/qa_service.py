@@ -38,6 +38,145 @@ def get_conversation(db: Session, conversation_id: int) -> Optional[QaConversati
     return db.get(QaConversation, conversation_id)
 
 
+# 答案来源类型 → 展示标签
+_ANSWER_SOURCE_LABELS = {1: "知识库生成", 2: "标准答复", 3: "未找到资料"}
+
+
+def get_conversation_history(
+    db: Session,
+    user_id: int,
+    offset: int,
+    limit: int,
+    keyword: Optional[str] = None,
+    sort: str = "recent",
+) -> tuple[list[dict], int, dict]:
+    """会话历史（只读聚合）：返回富信息会话卡片列表 + 总数 + 顶部 KPI。
+
+    每个会话附带：消息数、预览(首条用户提问)、平均置信度、主要答案来源标签。
+    KPI：总对话数、整体平均置信度、高频答案来源(标签+占比)。
+    不修改任何现有接口/表结构，纯聚合查询。
+    """
+    base = select(QaConversation).where(
+        QaConversation.user_id == user_id, QaConversation.status == 1
+    )
+    if keyword:
+        base = base.where(QaConversation.title.ilike(f"%{keyword}%"))
+    convs = list(db.execute(base).scalars().all())
+    conv_ids = [c.id for c in convs]
+
+    # ---- 每会话聚合：消息数 / 平均置信度 ----
+    msg_counts: dict[int, int] = {}
+    avg_confs: dict[int, Optional[float]] = {}
+    if conv_ids:
+        for cid, cnt in db.execute(
+            select(QaMessage.conversation_id, func.count())
+            .where(QaMessage.conversation_id.in_(conv_ids))
+            .group_by(QaMessage.conversation_id)
+        ):
+            msg_counts[cid] = int(cnt)
+        for cid, ac in db.execute(
+            select(QaMessage.conversation_id, func.avg(QaMessage.confidence))
+            .where(QaMessage.conversation_id.in_(conv_ids), QaMessage.role == 2)
+            .group_by(QaMessage.conversation_id)
+        ):
+            avg_confs[cid] = float(ac) if ac is not None else None
+
+    # ---- 排序后分页 ----
+    def _sort_key(c: QaConversation):
+        if sort == "messages":
+            return msg_counts.get(c.id, 0)
+        if sort == "confidence":
+            return avg_confs.get(c.id) or 0.0
+        return c.updated_at or c.created_at  # recent
+
+    convs.sort(key=_sort_key, reverse=True)
+    total = len(convs)
+    page_convs = convs[offset : offset + limit]
+    page_ids = [c.id for c in page_convs]
+
+    # ---- 当前页：预览(首条用户提问) + 主要答案来源 ----
+    previews: dict[int, str] = {}
+    main_source: dict[int, Optional[int]] = {}
+    if page_ids:
+        # 每会话首条用户提问
+        for cid in page_ids:
+            first_q = db.execute(
+                select(QaMessage.content)
+                .where(QaMessage.conversation_id == cid, QaMessage.role == 1)
+                .order_by(QaMessage.id)
+                .limit(1)
+            ).scalar()
+            if first_q:
+                previews[cid] = first_q
+        # 每会话出现最多的答案来源类型
+        rows = db.execute(
+            select(QaMessage.conversation_id, QaMessage.answer_type, func.count())
+            .where(
+                QaMessage.conversation_id.in_(page_ids),
+                QaMessage.role == 2,
+                QaMessage.answer_type.isnot(None),
+            )
+            .group_by(QaMessage.conversation_id, QaMessage.answer_type)
+        ).all()
+        best: dict[int, tuple[int, int]] = {}  # cid -> (count, answer_type)
+        for cid, atype, cnt in rows:
+            cur = best.get(cid)
+            if cur is None or cnt > cur[0]:
+                best[cid] = (int(cnt), int(atype))
+        main_source = {cid: v[1] for cid, v in best.items()}
+
+    items = [
+        {
+            "id": c.id,
+            "title": c.title or "未命名会话",
+            "preview": (previews.get(c.id, "") or "")[:120],
+            "message_count": msg_counts.get(c.id, 0),
+            "avg_confidence": avg_confs.get(c.id),
+            "source_type": main_source.get(c.id),
+            "source_label": _ANSWER_SOURCE_LABELS.get(main_source.get(c.id) or 0),
+            "created_at": c.created_at,
+            "updated_at": c.updated_at,
+        }
+        for c in page_convs
+    ]
+
+    # ---- KPI：整体平均置信度 + 高频答案来源 ----
+    all_ids = conv_ids
+    overall_avg_conf: Optional[float] = None
+    top_source = {"label": None, "percent": 0}
+    if all_ids:
+        oac = db.execute(
+            select(func.avg(QaMessage.confidence)).where(
+                QaMessage.conversation_id.in_(all_ids), QaMessage.role == 2
+            )
+        ).scalar()
+        overall_avg_conf = float(oac) if oac is not None else None
+
+        src_rows = db.execute(
+            select(QaMessage.answer_type, func.count())
+            .where(
+                QaMessage.conversation_id.in_(all_ids),
+                QaMessage.role == 2,
+                QaMessage.answer_type.isnot(None),
+            )
+            .group_by(QaMessage.answer_type)
+        ).all()
+        total_ans = sum(int(cnt) for _, cnt in src_rows)
+        if total_ans > 0:
+            atype, cnt = max(src_rows, key=lambda r: r[1])
+            top_source = {
+                "label": _ANSWER_SOURCE_LABELS.get(int(atype)),
+                "percent": round(int(cnt) / total_ans * 100),
+            }
+
+    kpi = {
+        "total_conversations": len(all_ids),
+        "avg_confidence": overall_avg_conf,
+        "top_source": top_source,
+    }
+    return items, total, kpi
+
+
 def create_conversation(db: Session, user_id: int, title: Optional[str]) -> QaConversation:
     conv = QaConversation(user_id=user_id, title=title, status=1)
     db.add(conv)

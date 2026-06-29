@@ -39,3 +39,15 @@ export function submitFeedback(
 export function getReferences(messageId: number): Promise<Reference[]> {
   return request.get(`/messages/${messageId}/references`)
 }
+
+// ===== 会话历史（富信息卡片 + KPI）=====
+export interface HistoryQuery {
+  page?: number
+  size?: number
+  keyword?: string
+  sort?: 'recent' | 'messages' | 'confidence'
+}
+
+export function getHistory(params?: HistoryQuery): Promise<PageResult<any> & { kpi: any }> {
+  return request.get('/conversations/history', { params })
+}

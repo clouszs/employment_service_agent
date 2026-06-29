@@ -49,3 +49,12 @@ export interface UnansweredQuery {
 export function listUnanswered(params: UnansweredQuery): Promise<PageResult<{ id: number; question: string; ask_count: number; status: number }>> {
   return request.get('/unanswered', { params })
 }
+
+// ===== 就业数据 =====
+export interface EmploymentQuery {
+  department?: string
+  grade?: string
+}
+export function getEmployment(params?: EmploymentQuery): Promise<any> {
+  return request.get('/stats/employment', { params })
+}
