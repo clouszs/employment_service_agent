@@ -1,5 +1,6 @@
 """全局配置：从 .env 读取，pydantic-settings 管理。"""
 
+from pathlib import Path
 import secrets
 from functools import lru_cache
 
@@ -8,8 +9,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    _ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(_ENV_FILE),
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,  # 支持大小写不敏感的 env 变量读取
