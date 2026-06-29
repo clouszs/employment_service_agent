@@ -28,8 +28,8 @@ async function onSubmit() {
     try {
       await userStore.login(form.username, form.password)
       ElMessage.success('登录成功')
-      // 按角色跳转：管理员/编辑 → 管理后台；其他 → 问答端
-      router.push(userStore.hasAdminAccess ? '/admin' : '/chat')
+      // 登录后按角色 homeRoute 落地
+      router.push(userStore.homeRoute)
     } catch {
       // 错误提示已由 axios 拦截器处理
     } finally {

@@ -124,7 +124,7 @@ async function enrichSnippets(items: FavoriteItem[]) {
 
 function onRowClick(row: FavoriteItem) {
   if (row.conversation_id) {
-    router.push({ path: '/chat', query: { conversation_id: String(row.conversation_id) } })
+    router.push({ path: '/student/chat', query: { conversation_id: String(row.conversation_id) } })
   }
 }
 

@@ -1,28 +1,28 @@
 <script setup lang="ts">
+/**
+ * 教师工作台布局：左侧分组侧边栏（克隆管理端样式），内容聚焦内容维护。
+ * 教师 = editor 角色；可访问数据看板 / FAQ管理 / 对话监控 / 就业数据 / 个人资料。
+ */
 import { computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
-import {
-  SwitchButton,
-  ChatLineRound,
-} from '@element-plus/icons-vue'
+import { SwitchButton, ChatLineRound } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
-import { ADMIN_MENU } from '@/config/menus'
+import { TEACHER_MENU } from '@/config/menus'
 import ParticlesBg from '@/components/common/ParticlesBg.vue'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
-const { user, isAdmin } = storeToRefs(userStore)
+const { user } = storeToRefs(userStore)
 
 const activeMenu = computed(() => route.path)
-
 const pageTitle = computed(() => {
-  for (const g of ADMIN_MENU) {
+  for (const g of TEACHER_MENU) {
     const hit = g.items.find((it) => it.path === route.path)
     if (hit) return hit.label
   }
-  return '管理后台'
+  return '教师工作台'
 })
 
 onMounted(async () => {
@@ -48,14 +48,13 @@ function onLogout() {
 </script>
 
 <template>
-  <el-container class="admin-layout">
-    <!-- 深色科技感侧边栏 + 粒子 -->
+  <el-container class="teacher-layout">
     <el-aside width="220px" class="aside">
       <ParticlesBg color="56, 189, 248" :density="9000" :interactive="false" />
       <div class="aside-inner">
         <div class="logo">
           <span class="logo-mark">⬡</span>
-          <span class="logo-text">就业问答 · 后台</span>
+          <span class="logo-text">就业问答 · 教师</span>
         </div>
         <el-menu
           :default-active="activeMenu"
@@ -65,11 +64,8 @@ function onLogout() {
           active-text-color="#7dd3fc"
           @select="go"
         >
-          <template v-for="group in ADMIN_MENU" :key="group.title || 'root'">
-            <template v-if="group.adminOnly && !isAdmin">
-              <!-- skip admin-only groups -->
-            </template>
-            <el-menu-item-group v-else-if="group.title" :title="group.title">
+          <template v-for="group in TEACHER_MENU" :key="group.title || 'root'">
+            <el-menu-item-group v-if="group.title" :title="group.title">
               <el-menu-item v-for="item in group.items" :key="item.path" :index="item.path">
                 <el-icon><component :is="item.icon" /></el-icon><span>{{ item.label }}</span>
               </el-menu-item>
@@ -103,7 +99,7 @@ function onLogout() {
 </template>
 
 <style scoped>
-.admin-layout {
+.teacher-layout {
   height: 100%;
 }
 .aside {

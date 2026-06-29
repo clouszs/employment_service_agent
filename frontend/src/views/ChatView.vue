@@ -168,7 +168,7 @@ function onSearchResult(_result: unknown) {
 }
 
 function goFavorites() {
-  router.push('/chat/favorites')
+  router.push('/student/conversations')
 }
 
 const profileVisible = ref(false)
