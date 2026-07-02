@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field
+
+from app.schemas.common import ORMModel
 
 
 # ===== 简历 =====
@@ -13,6 +16,33 @@ class ResumeGenerateRequest(BaseModel):
     extra_profile: Optional[dict[str, Any]] = Field(
         default=None, description="前端补充档案（major/skills/experience 等自由字段）"
     )
+
+
+class ResumeSaveRequest(BaseModel):
+    title: str = Field(..., max_length=128, description="简历标题")
+    content: dict[str, Any] = Field(..., description="简历 JSON 对象")
+    is_default: bool = Field(default=False, description="是否设为默认")
+
+
+class ResumeRead(ORMModel):
+    id: int
+    user_id: int
+    title: str
+    content: dict[str, Any]
+    pdf_path: Optional[str]
+    is_default: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class ResumeListResponse(ORMModel):
+    total: int
+    items: list[ResumeRead]
+
+
+class ResumePDFResponse(ORMModel):
+    download_url: str
+    filename: str
 
 
 # ===== 职位推荐 =====

@@ -48,3 +48,30 @@ def setup_langsmith() -> bool:
     os.environ.update(env)
     logger.info("LangSmith 追踪已启用：project=%s endpoint=%s", settings.langsmith_project, settings.langsmith_endpoint)
     return True
+
+
+def refresh_langsmith_status(enabled: bool, api_key: str = "", project: str = "", endpoint: str = "") -> bool:
+    """运行时刷新 LangSmith 开关。返回当前是否启用。"""
+    if not enabled:
+        os.environ["LANGSMITH_TRACING"] = "false"
+        os.environ["LANGCHAIN_TRACING_V2"] = "false"
+        logger.info("LangSmith 追踪已关闭（运行时开关）")
+        return False
+
+    final_key = api_key or os.environ.get("LANGSMITH_API_KEY", "")
+    final_project = project or settings.langsmith_project
+    final_endpoint = endpoint or settings.langsmith_endpoint
+    if not final_key:
+        logger.warning("LangSmith 运行时启用但未提供 API Key，追踪不会生效")
+        return False
+
+    os.environ["LANGSMITH_TRACING"] = "true"
+    os.environ["LANGSMITH_API_KEY"] = final_key
+    os.environ["LANGSMITH_PROJECT"] = final_project
+    os.environ["LANGSMITH_ENDPOINT"] = final_endpoint
+    os.environ["LANGCHAIN_TRACING_V2"] = "true"
+    os.environ["LANGCHAIN_API_KEY"] = final_key
+    os.environ["LANGCHAIN_PROJECT"] = final_project
+    os.environ["LANGCHAIN_ENDPOINT"] = final_endpoint
+    logger.info("LangSmith 追踪已启用（运行时开关）：project=%s endpoint=%s", final_project, final_endpoint)
+    return True

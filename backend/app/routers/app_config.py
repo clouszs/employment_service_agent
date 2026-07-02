@@ -11,6 +11,7 @@ from app.core.response import success
 from app.models import SysUser
 from app.schemas.app_config import AppConfigCreate, AppConfigRead, AppConfigUpdate
 from app.services import app_config_service as svc
+from app.services.app_config_service import seed_qa_defaults
 
 router = APIRouter(prefix="/app-configs", tags=["运营-系统配置"])
 
@@ -93,3 +94,34 @@ def delete_config(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="配置不存在")
     svc.delete_app_config(db, obj)
     return success(message="已删除")
+
+
+@router.post("/seed-defaults", summary="初始化默认问答配置")
+def seed_defaults(
+    db: Session = Depends(get_db),
+    _: SysUser = Depends(require_roles("admin")),
+) -> dict:
+    """初始化默认问答配置，已存在则跳过。"""
+    from app.services.app_config_service import seed_qa_defaults
+    items = seed_qa_defaults(db)
+    return success(
+        {"seeded": len(items)},
+        message=f"已初始化 {len(items)} 项默认配置",
+    )
+
+
+@router.post("/upsert", summary="创建或更新配置")
+def upsert_config(
+    payload: AppConfigCreate,
+    db: Session = Depends(get_db),
+    _: SysUser = Depends(require_roles("admin")),
+) -> dict:
+    """upsert：若 key 存在则更新，否则新建。"""
+    obj = svc.upsert_app_config(
+        db,
+        config_key=payload.config_key,
+        config_value=payload.config_value,
+        description=payload.description,
+        group_name=payload.group_name,
+    )
+    return success(AppConfigRead.model_validate(obj).model_dump(), message="已保存")

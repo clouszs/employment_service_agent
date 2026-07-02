@@ -3,16 +3,33 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.deps import get_current_user, require_roles
 from app.core.response import success
 from app.models import SysUser
+from app.models.knowledge import KbFaq
 from app.schemas.knowledge import FaqBatchAction, FaqCreate, FaqRead, FaqStatusUpdate, FaqUpdate
 from app.services import knowledge_service as svc
 
 router = APIRouter(prefix="/faqs", tags=["知识库-FAQ"])
+
+
+@router.get("/top", summary="热门FAQ列表(按学生命中次数排序,学生可读)")
+def top_faqs(
+    size: int = Query(20, ge=1, le=100, description="返回数量"),
+    db: Session = Depends(get_db),
+    _: SysUser = Depends(get_current_user),
+) -> dict:
+    """热门 FAQ：返回全部启用 FAQ，按 ask_count 降序排列。
+
+    ask_count 是学生侧模糊命中次数（语义未命中但问法相近时累加）。
+    命中 0 次的排在末尾，方便管理员识别哪些 FAQ 从未被问过。
+    """
+    rows = db.query(KbFaq).filter(KbFaq.status == 1).order_by(desc(KbFaq.ask_count)).limit(size).all()
+    return success([FaqRead.model_validate(r).model_dump() for r in rows])
 
 
 @router.post("/batch", summary="批量启用/禁用/删除FAQ")

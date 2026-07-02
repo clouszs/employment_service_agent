@@ -39,3 +39,9 @@ redis>=5.0
 
 # 外部检索兜底 — 阶段 7 引入
 newsapi-python>=0.2.0
+
+# 模糊匹配 — FAQ 命中去重统计（性能优于 difflib，轻量无额外依赖）
+rapidfuzz>=3.9
+
+# PDF 生成 — 简历导出
+reportlab>=4.0

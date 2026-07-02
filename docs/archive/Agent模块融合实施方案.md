@@ -411,21 +411,30 @@ START → route → [search | direct | refuse]
                     ↓
          check_consistency → verify_facts
                     ↓
-          🔧 content_moderation（内容审核）
-                    ↓
-              [accept | accept_with_warning | refuse]
-                    ↓
-              🔧 error_handler（兜底错误处理）
-                    ↓
-                     END
+           [accept | regenerate | refuse]
+            ↙          |              \
+        accept      regenerate        refuse
+          ↓              ↓               ↓
+ content_moderation  verify_facts    refuse
+          ↓           ↙   \
+     [accept |        accept  regenerate
+      accept_with_warning ↓      ↓
+           ↓         content_moderation  (retry < MAX)
+     error_handler           ↓
+           ↓           [accept | accept_with_warning | refuse]
+           ↓                    ↓
+           →──────────────── error_handler
+                              ↓
+                               END
 ```
 
-🔧 **【优化新增】完整工作流图（含死循环防护 + 内容审核 + 错误处理）**：
+🔧 **【优化新增】完整工作流图（含三阶段自校正闭环 + 熔断机制）**：
 
 ```python
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 from app.core.config import settings
+from app.agent.constants import MAX_REGENERATE_RETRY
 
 class AgentGraph:
     def __init__(self, nodes):
@@ -442,10 +451,10 @@ class AgentGraph:
         graph.add_node("regenerate",          self.nodes.regenerate_with_hints)
         graph.add_node("check_consistency",   self.nodes.check_consistency)
         graph.add_node("verify_facts",        self.nodes.verify_facts)
-        graph.add_node("content_moderation",  self.nodes.content_moderation)   # 🔧 新增
+        graph.add_node("content_moderation",  self.nodes.content_moderation)
         graph.add_node("accept_with_warning", self.nodes.accept_with_warning)
         graph.add_node("refuse",              self.nodes.generate_refusal)
-        graph.add_node("error_handler",     self.nodes.error_handler)      # 🔧 新增
+        graph.add_node("error_handler",       self.nodes.error_handler)
 
         graph.add_edge(START, "route")
 
@@ -463,20 +472,35 @@ class AgentGraph:
             "check_confidence", self._confidence_decision,
             {
                 "accept":     "generate",
-                "regenerate": "regenerate",  # 降级阈值后再检索
+                "regenerate": "regenerate",
                 "refuse":     "refuse",
             },
         )
 
-        # regenerate → generate（后续加跳转回 search 的逻辑）
-        graph.add_edge("regenerate", "generate")
-
-        # generate → check_consistency → verify_facts → content_moderation（🔧 新增内容审核）
+        # generate → check_consistency → verify_facts（三阶段审查）
         graph.add_edge("generate", "check_consistency")
         graph.add_edge("check_consistency", "verify_facts")
-        graph.add_edge("verify_facts", "content_moderation")
 
-        # content_moderation → 最终决策（🔧 新增：内容审核后再决策）
+        # [Self-Refinement] verify_facts 之后进入三阶段自校正闭环
+        graph.add_conditional_edges(
+            "verify_facts", self._verify_decision,
+            {
+                "accept":     "content_moderation",
+                "regenerate": "regenerate",
+                "refuse":     "refuse",
+            },
+        )
+
+        # [Self-Refinement] regenerate 之后回到审查环，或熔断到 content_moderation
+        graph.add_conditional_edges(
+            "regenerate", self._after_regenerate_decision,
+            {
+                "verify_facts":       "verify_facts",
+                "content_moderation": "content_moderation",
+            },
+        )
+
+        # content_moderation → 最终决策
         graph.add_conditional_edges(
             "content_moderation", self._post_moderation_decision,
             {
@@ -486,27 +510,18 @@ class AgentGraph:
             },
         )
 
-        graph.add_edge("accept_with_warning", "error_handler")   # 🔧 走错误处理兜底
-        graph.add_edge("refuse", "error_handler")               # 🔧 走错误处理兜底
-        graph.add_edge("error_handler", END)                     # 🔧 最终出口
+        graph.add_edge("accept_with_warning", "error_handler")
+        graph.add_edge("refuse", "error_handler")
+        graph.add_edge("error_handler", END)
 
         self.graph = graph
         return graph
-
-    def compile(self):
-        """编译工作流，配置Checkpoint和递归限制"""
-        graph = self.build()
-        memory = MemorySaver()
-        return graph.compile(
-            checkpointer=memory,
-            # 🔧【优化新增】递归限制，防止死循环（硬兜底）
-            recursion_limit=settings.agent_recursion_limit,
-        )
 ```
 
 关键：
 - 使用 `MemorySaver` 做 Checkpoint，支持对话暂停/恢复
-- 🔧 **【优化新增】** `recursion_limit` 硬限制递归步数（防死循环最后一道防线）
+- `recursion_limit` 硬限制递归步数（防死循环最后一道防线）
+- 🔧 **【优化新增】** 三阶段自校正闭环：`verify_facts → regenerate → verify_facts`，最多循环 `MAX_REGENERATE_RETRY=2` 次后熔断到 `content_moderation`
 
 #### 1.4 新建 `backend/app/agent/tools.py`
 
@@ -1229,7 +1244,7 @@ def search_knowledge(self, state: AgentState) -> dict:
     # ... 检索逻辑
 ```
 
-### 8.4 结果验证循环 — 解法：严重度分级 + 最大重生成
+### 8.4 结果验证循环 — 解法：严重度分级 + 最大重生成 + 熔断
 
 **核心问题**：`生成 → 发现一致性问题 → 重新生成 → 又有问题 → ...`，验证器永远发现问题。
 
@@ -1237,7 +1252,7 @@ def search_knowledge(self, state: AgentState) -> dict:
 
 ```python
 # agent/nodes.py — check_consistency 节点只做标记
-def check_consistency(self, state: AgentState) -> dict:
+def check_consistency(state: AgentState) -> dict:
     is_consistent, issues = self.consistency_checker.check(...)
     high_issues = [i for i in issues if i.get("severity") == "high"]
     medium_issues = [i for i in issues if i.get("severity") == "medium"]
@@ -1250,32 +1265,11 @@ def check_consistency(self, state: AgentState) -> dict:
     }
 ```
 
-**路由决策**：
-
-```python
-# graph.py — 条件边决策
-MAX_REGENERATE = 2
-
-def _post_generation_decision(self, state: AgentState) -> str:
-    """生成后的条件分支：根据验证结果决定下一步"""
-    regenerate_count = state.get("regenerate_count", 0)
-
-    if state.get("high_severity_count", 0) > 0:
-        if regenerate_count < self.MAX_REGENERATE:
-            return "regenerate"   # 还有重试机会
-        return "refuse"           # 重试耗尽 → 拒答 + 人工审核标记
-
-    if state.get("medium_severity_count", 0) > 0:
-        return "accept_with_warning"  # 接受，附加警告
-
-    return "accept"                   # 没问题，直接通过
-```
-
 **解法 B：生成时注入修正信息**
 
 ```python
 # agent/nodes.py — regenerate_with_hints 节点
-def regenerate_with_hints(self, state: AgentState) -> dict:
+def regenerate_with_hints(state: AgentState) -> dict:
     """带修正提示的重新生成"""
     query = state["current_query"]
     context = state["search_results"]
@@ -1297,6 +1291,11 @@ def regenerate_with_hints(self, state: AgentState) -> dict:
     return {
         "response": response.content,
         "regenerate_count": state.get("regenerate_count", 0) + 1,
+        "retry_attempt": state.get("retry_attempt", 0) + 1,
+        "regeneration_hint": _build_hint(
+            state.get("fact_issues", []),
+            state.get("consistency_issues", []),
+        ),
         "route": "regenerated",
     }
 ```
@@ -1315,6 +1314,48 @@ def check_consistency(self, state: AgentState) -> dict:
     return {"consistency_issues": issues}
 ```
 
+**解法 D：审查后条件决策 + 重生成后熔断（Self-Refinement 新增）**
+
+```python
+# agent/graph.py — verify_facts 后的条件边
+def _verify_decision(state: AgentState) -> str:
+    if state.get("should_refuse"):
+        return "refuse"
+    if state.get("should_retry"):
+        return "regenerate"
+    return "accept"
+
+graph.add_conditional_edges(
+    "verify_facts", _verify_decision,
+    {
+        "accept":     "content_moderation",
+        "regenerate": "regenerate",
+        "refuse":     "refuse",
+    },
+)
+
+# agent/graph.py — regenerate 后的条件边
+MAX_REGENERATE_RETRY = 2
+
+def _after_regenerate_decision(state: AgentState) -> str:
+    retry = state.get("retry_attempt", 0)
+    if retry < MAX_REGENERATE_RETRY:
+        return "verify_facts"
+    return "content_moderation"
+
+graph.add_conditional_edges(
+    "regenerate", _after_regenerate_decision,
+    {
+        "verify_facts":       "verify_facts",
+        "content_moderation": "content_moderation",
+    },
+)
+```
+
+说明：
+- `verify_facts` 节点不再直接连 `content_moderation`，而是先进入三阶段自校正闭环。
+- `regenerate` 节点不再固定回 `generate`，而是先回到 `verify_facts`；若未超过 `MAX_REGENERATE_RETRY=2`，继续闭环；超过则熔断到 `content_moderation`。
+
 ### 8.5 统一治理：在 graph.py 层面全部兜住
 
 三种循环最干净的解决方式是在工作流图的**环路上统一加判断**，而不是分散在各个节点里。
@@ -1330,9 +1371,20 @@ START → route → [search | direct | refuse]
                     ↓
          check_consistency → verify_facts
                     ↓
-              [accept | accept_with_warning | refuse]
-                    ↓
-                     END
+           [accept | regenerate | refuse]
+            ↙          |              \
+        accept      regenerate        refuse
+          ↓              ↓               ↓
+ content_moderation  verify_facts    refuse
+          ↓           ↙   \
+     [accept |        accept  regenerate
+      accept_with_warning ↓      ↓
+           ↓         content_moderation  (retry < MAX)
+     error_handler           ↓
+           ↓           [accept | accept_with_warning | refuse]
+           →──────────────── error_handler
+                              ↓
+                               END
 ```
 
 ```python
@@ -1344,11 +1396,13 @@ def build(self) -> StateGraph:
     graph.add_node("search",              self.nodes.search_knowledge)
     graph.add_node("check_confidence",    self.nodes.check_confidence)
     graph.add_node("generate",            self.nodes.generate_response)
-    graph.add_node("regenerate",          self.nodes.regenerate_with_hints)  # ← 新增
+    graph.add_node("regenerate",          self.nodes.regenerate_with_hints)
     graph.add_node("check_consistency",   self.nodes.check_consistency)
     graph.add_node("verify_facts",        self.nodes.verify_facts)
-    graph.add_node("accept_with_warning", self.nodes.accept_with_warning)   # ← 新增
+    graph.add_node("content_moderation",  self.nodes.content_moderation)
+    graph.add_node("accept_with_warning", self.nodes.accept_with_warning)
     graph.add_node("refuse",              self.nodes.generate_refusal)
+    graph.add_node("error_handler",       self.nodes.error_handler)
 
     graph.add_edge(START, "route")
 
@@ -1366,21 +1420,37 @@ def build(self) -> StateGraph:
         "check_confidence", self._confidence_decision,
         {
             "accept":     "generate",
-            "regenerate": "regenerate",  # 降级阈值后再检索
+            "regenerate": "regenerate",
             "refuse":     "refuse",
         },
     )
 
-    # regenerate → generate（后续加跳转回 search 的逻辑）
-    graph.add_edge("regenerate", "generate")
-
-    # generate → check_consistency
+    # generate → check_consistency → verify_facts（三阶段审查）
     graph.add_edge("generate", "check_consistency")
     graph.add_edge("check_consistency", "verify_facts")
 
-    # verify_facts → 最终决策
+    # [Self-Refinement] verify_facts 之后进入三阶段自校正闭环
     graph.add_conditional_edges(
-        "verify_facts", self._post_generation_decision,
+        "verify_facts", self._verify_decision,
+        {
+            "accept":     "content_moderation",
+            "regenerate": "regenerate",
+            "refuse":     "refuse",
+        },
+    )
+
+    # [Self-Refinement] regenerate 之后回到审查环，或熔断到 content_moderation
+    graph.add_conditional_edges(
+        "regenerate", self._after_regenerate_decision,
+        {
+            "verify_facts":       "verify_facts",
+            "content_moderation": "content_moderation",
+        },
+    )
+
+    # content_moderation → 最终决策
+    graph.add_conditional_edges(
+        "content_moderation", self._post_moderation_decision,
         {
             "accept":              END,
             "accept_with_warning": "accept_with_warning",
@@ -1388,12 +1458,18 @@ def build(self) -> StateGraph:
         },
     )
 
-    graph.add_edge("accept_with_warning", END)
-    graph.add_edge("refuse", END)
+    graph.add_edge("accept_with_warning", "error_handler")
+    graph.add_edge("refuse", "error_handler")
+    graph.add_edge("error_handler", END)
 
     self.graph = graph
     return graph
 ```
+
+说明：
+- `verify_facts` 不再直接连 `content_moderation`，而是先进入三阶段自校正闭环。
+- `regenerate` 不再固定回 `generate`，而是先回到 `verify_facts`；若未超过 `MAX_REGENERATE_RETRY=2`，继续闭环；超过则熔断到 `content_moderation`。
+- 其余兜底/错误处理路径保持不变。
 
 ### 8.6 完整防护矩阵
 

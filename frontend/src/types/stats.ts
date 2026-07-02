@@ -7,7 +7,6 @@ export interface StatsOverview {
 }
 
 export interface HotQuestion {
-  faq_id: number
   question: string
-  hit_count: number
+  ask_count: number
 }

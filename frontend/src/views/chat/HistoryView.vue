@@ -121,6 +121,7 @@ watch(keyword, applyFilter)
 .header h2 {
   margin: 0 0 8px;
   font-size: 24px;
+  color: #1e293b;
 }
 .desc {
   margin: 0;
@@ -135,9 +136,10 @@ watch(keyword, applyFilter)
 }
 .kpi-card {
   padding: 20px;
-  background: white;
-  border-radius: 8px;
+  background: #ffffff;
+  border-radius: 10px;
   border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 .kpi-label {
   font-size: 13px;
@@ -147,7 +149,7 @@ watch(keyword, applyFilter)
 .kpi-value {
   font-size: 28px;
   font-weight: 700;
-  color: #111827;
+  color: #1e293b;
 }
 .toolbar {
   display: flex;
@@ -160,9 +162,14 @@ watch(keyword, applyFilter)
 }
 .conv-card {
   padding: 20px;
-  background: white;
-  border-radius: 8px;
+  background: #ffffff;
+  border-radius: 10px;
   border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: box-shadow 0.2s;
+}
+.conv-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
 }
 .conv-header {
   display: flex;
@@ -173,6 +180,7 @@ watch(keyword, applyFilter)
 .conv-header h3 {
   margin: 0;
   font-size: 16px;
+  color: #1e293b;
 }
 .time {
   font-size: 13px;

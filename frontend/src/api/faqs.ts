@@ -8,6 +8,7 @@ export interface FaqItem {
   category_id: number | null
   vector_id: string | null
   hit_count: number
+  ask_count: number
   status: number
   created_at: string
   updated_at: string
@@ -62,4 +63,8 @@ export function deleteFaq(id: number): Promise<{ message: string }> {
 
 export function batchFaqs(payload: FaqBatchPayload): Promise<{ data: { affected: number }; message: string }> {
   return request.post('/faqs/batch', payload)
+}
+
+export function getTopFaqs(size = 20): Promise<FaqItem[]> {
+  return request.get('/faqs/top', { params: { size } })
 }

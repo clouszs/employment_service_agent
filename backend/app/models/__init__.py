@@ -31,6 +31,7 @@ from app.models.user import SysRole, SysUser, SysUserRole
 from app.models.app_config import AppConfig
 from app.models.user_favorite import UserFavorite
 from app.models.announcement import Announcement
+from app.models.resume import UserResume
 from app.models.llm_usage import LlmUsage, LlmUsageSource
 
 __all__ = [
@@ -63,9 +64,10 @@ __all__ = [
     "CitationQualityLog",
     "ConsistencyIssueLog",
     "FactVerificationLog",
-  "AppConfig",
-  "UserFavorite",
-  "Announcement",
+    "AppConfig",
+    "UserFavorite",
+    "Announcement",
+    "UserResume",
     "LlmUsage",
     "LlmUsageSource",
 ]

@@ -9,7 +9,6 @@ import { storeToRefs } from 'pinia'
 import { SwitchButton, ChatLineRound } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { TEACHER_MENU } from '@/config/menus'
-import ParticlesBg from '@/components/common/ParticlesBg.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -49,8 +48,8 @@ function onLogout() {
 
 <template>
   <el-container class="teacher-layout">
+    <!-- 简约侧边栏 -->
     <el-aside width="220px" class="aside">
-      <ParticlesBg color="56, 189, 248" :density="9000" :interactive="false" />
       <div class="aside-inner">
         <div class="logo">
           <span class="logo-mark">⬡</span>
@@ -91,8 +90,8 @@ function onLogout() {
         </div>
       </el-header>
 
-      <el-main class="main light-content">
-        <div class="content-wrapper">
+      <el-main class="main">
+        <div class="content-wrapper light-content">
           <router-view />
         </div>
       </el-main>
@@ -107,8 +106,8 @@ function onLogout() {
 .aside {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(180deg, #0d1b34 0%, #0a1226 100%);
-  border-right: 1px solid rgba(56, 189, 248, 0.18);
+  background: #1e293b;
+  border-right: 1px solid #334155;
 }
 .aside-inner {
   position: relative;
@@ -127,7 +126,6 @@ function onLogout() {
 .logo-mark {
   font-size: 22px;
   color: #38bdf8;
-  text-shadow: 0 0 12px rgba(56, 189, 248, 0.8);
 }
 .logo-text {
   font-size: 15px;
@@ -140,20 +138,20 @@ function onLogout() {
   overflow-y: auto;
 }
 .menu :deep(.el-menu-item-group__title) {
-  color: #5b7299;
+  color: #64748b;
   font-size: 12px;
   padding-left: 18px;
 }
 .menu :deep(.el-menu-item.is-active) {
-  background: rgba(56, 189, 248, 0.12);
+  background: #0f172a;
   border-right: 2px solid #38bdf8;
 }
 .header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: #0d1b34;
-  border-bottom: 1px solid rgba(56, 189, 248, 0.18);
+  background: #1e293b;
+  border-bottom: 1px solid #334155;
   color: #e0f2fe;
 }
 .page-title {
@@ -168,10 +166,10 @@ function onLogout() {
 }
 .username {
   font-size: 14px;
-  color: #a9c2e0;
+  color: #94a3b8;
 }
 .link-btn {
-  color: #a9c2e0;
+  color: #94a3b8;
 }
 .link-btn:hover {
   color: #7dd3fc;

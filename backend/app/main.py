@@ -73,6 +73,18 @@ async def lifespan(app: FastAPI):
     from app.monitor.scheduler import setup_scheduler
 
     setup_scheduler()
+
+    # 初始化默认问答配置
+    from app.services.app_config_service import seed_qa_defaults
+    from app.core.database import SessionLocal
+    db = SessionLocal()
+    try:
+        seed_qa_defaults(db)
+    except Exception as e:  # pragma: no cover - 防御性降级
+        logger.warning("初始化默认问答配置失败: %s", str(e))
+    finally:
+        db.close()
+
     logger.info("应用启动完成，环境=%s，debug=%s", settings.app_env, settings.app_debug)
     yield
     # 关闭时优雅释放资源

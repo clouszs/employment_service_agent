@@ -1,6 +1,6 @@
 # 当前能力清单
 
-> 反映 2026-06-28 去债务重构**之后**的真实能力。原始阶段记录见 [docs/progress/](../progress/)，决策依据见 [../architecture/ARCHITECTURE_DECISIONS.md](../architecture/ARCHITECTURE_DECISIONS.md)。
+> 反映 2026-06-28 去债务重构**之后**，截至 2026-07-02 的最新状态。原始阶段记录见 [docs/progress/](../progress/)，决策依据见 [../architecture/ARCHITECTURE_DECISIONS.md](../architecture/ARCHITECTURE_DECISIONS.md)。
 
 ---
 
@@ -30,7 +30,7 @@
 | 管理端对话 | `/admin/conversations` | 全站对话列表/详情/强制删除（Phase 11） |
 | 安全 / 日志 | `/sensitive-words`、`/logs` | 敏感词 / 查询日志 |
 | 运营 | `/feedback`、`/unanswered`、`/eval-cases` | 反馈 / 无答案 / 评测集 |
-| 系统配置 / 收藏 / 公告 | `/app-configs`、`/favorites`、`/announcements` | QA 配置以 `qa_` 前缀区分（Phase 11） |
+| 系统配置 / 收藏 / 公告 / 学生服务 | `/app-configs`、`/favorites`、`/announcements`、`/career` | QA 配置以 `qa_` 前缀区分（Phase 11）；`/career` 学生生涯服务见 Table 4 |
 
 > 端点数明细见 `phase-5-routing-schema.md` 验收路由表。
 
@@ -59,6 +59,6 @@
 | `/career/jobs` | POST | `job_service.recommend_jobs` | 基于知识库 RAG 检索推荐职位（确定性，无 LLM） |
 | `/career/calendar/ics` | POST | `calendar_service.build_ics` | 生成面试日程 ICS 文本（纯计算） |
 
-前端对接：[frontend/src/views/student/ResumeView.vue](../../frontend/src/views/student/ResumeView.vue)、[JobsView.vue](../../frontend/src/views/student/JobsView.vue)，API 封装 [frontend/src/api/career.ts](../../frontend/src/api/career.ts)。
+前端对接：[frontend/src/views/student/ResumeView.vue](../../frontend/src/views/student/ResumeView.vue)、[JobsView.vue](../../frontend/src/views/student/JobsView.vue)、[CalendarView.vue](../../frontend/src/views/student/CalendarView.vue)，API 封装 [frontend/src/api/career.ts](../../frontend/src/api/career.ts)。
 
-> `[待确认]` 简历/职位的就业数据看板、面试日历前端入口尚未开放（calendar 暂无 UI 落点）。
+> 学生生涯服务的就业数据看板、面试日历前端入口已就位（`CalendarView.vue`、`EmploymentDataView.vue`），由 `/student/calendar` 和 `/student/employment` 路由承载。

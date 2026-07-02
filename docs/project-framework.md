@@ -512,7 +512,7 @@ def build_agent_graph(state_cls, nodes: dict, edges: dict) -> CompiledGraph:
 | 工具选择循环 | tool_call_count 计数 | ≥ 3 次工具调用 | 强制生成回答 |
 | 检索去重 | last_search_query 比对 | 相同查询 + retry==0 | 跳过检索直接生成 |
 | 条件判断循环 | 动态阈值衰减 | 每次重试降 0.15 | 保底 0.30，仍不通过则拒答 |
-| 结果验证循环 | regenerate_count 计数 | ≥ 2 次重生成 | accept_with_warning |
+| 结果验证循环 | regenerate_count + retry_attempt 计数 | 超过 MAX_REGENERATE_RETRY=2 | 熔断到 content_moderation |
 | 递归深度 | LangGraph recursion_limit | 达到上限 | 抛出 RecursionError |
 | 超时 | asyncio.wait_for | 超过 60s | 取消任务，返回超时错误 |
 

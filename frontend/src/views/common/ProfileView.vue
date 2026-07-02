@@ -101,6 +101,7 @@ async function handleChangePassword() {
 .page-header h2 {
   margin: 0 0 4px;
   font-size: 22px;
+  color: #1e293b;
 }
 .subtitle {
   margin: 0;
@@ -109,5 +110,6 @@ async function handleChangePassword() {
 }
 .card-header {
   font-weight: 600;
+  color: #1e293b;
 }
 </style>

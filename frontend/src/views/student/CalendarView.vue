@@ -11,10 +11,24 @@
           <el-input v-model="form.title" placeholder="如：腾讯一面" clearable />
         </el-form-item>
         <el-form-item label="开始时间" required>
-          <el-input v-model="form.start_time" placeholder="如：2026-07-01T14:00:00" clearable />
+          <el-date-picker
+            v-model="form.start_time"
+            type="datetime"
+            placeholder="选择开始时间"
+            value-format="YYYY-MM-DDTHH:mm:ss"
+            :locale="zhCn"
+            style="width: 100%"
+          />
         </el-form-item>
         <el-form-item label="结束时间">
-          <el-input v-model="form.end_time" placeholder="缺省为开始时间 +1 小时" clearable />
+          <el-date-picker
+            v-model="form.end_time"
+            type="datetime"
+            placeholder="选择结束时间"
+            value-format="YYYY-MM-DDTHH:mm:ss"
+            :locale="zhCn"
+            style="width: 100%"
+          />
         </el-form-item>
         <el-form-item label="地点">
           <el-input v-model="form.location" placeholder="如：北京 / 腾讯会议号" clearable />
@@ -44,6 +58,7 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { zhCn } from 'element-plus/es/locale/index.mjs'
 import * as careerApi from '@/api/career'
 
 const loading = ref(false)
@@ -60,6 +75,10 @@ const form = reactive({
 async function handleGenerate() {
   if (!form.title || !form.start_time) {
     ElMessage.warning('请填写标题和开始时间')
+    return
+  }
+  if (form.end_time && form.end_time <= form.start_time) {
+    ElMessage.warning('结束时间必须晚于开始时间')
     return
   }
   loading.value = true
@@ -97,38 +116,51 @@ function handleDownload() {
 <style scoped>
 .calendar-view {
   max-width: 900px;
+  color: #1f2937;
 }
 .page-header {
   margin-bottom: 20px;
 }
 .page-header h2 {
-  margin: 0 0 4px;
+  margin: 0 0 6px;
   font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
 }
 .subtitle {
   margin: 0;
-  color: #6b7280;
-  font-size: 13px;
+  font-size: 14px;
+  color: #334155;
 }
 .form-card {
   margin-bottom: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+.preview-card {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 .preview-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
 }
 .preview-time {
-  color: #6b7280;
-  font-size: 13px;
+  color: #475569;
+  font-size: 14px;
+  font-weight: 500;
 }
 .ics-preview {
-  background: #f9fafb;
-  padding: 12px;
-  border-radius: 6px;
-  font-size: 12px;
-  line-height: 1.6;
+  background: #f8fafc;
+  padding: 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.8;
   white-space: pre-wrap;
   word-break: break-all;
+  color: #1e293b;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
 }
 </style>

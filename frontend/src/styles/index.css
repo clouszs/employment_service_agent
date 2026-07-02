@@ -149,6 +149,7 @@ body {
 .teacher-layout .light-content {
   background: #f5f7fa;
   min-height: 100%;
+  color: #1f2937;
 }
 
 /* 浅色区内的 Element Plus 组件 */
@@ -159,7 +160,15 @@ body {
 .light-content .el-input__wrapper,
 .light-content .el-textarea__inner,
 .light-content .el-select-dropdown,
-.light-content .el-message-box {
+.light-content .el-message-box,
+.student-layout .main .el-card,
+.student-layout .main .el-dialog,
+.student-layout .main .el-drawer,
+.student-layout .main .el-table,
+.student-layout .main .el-input__wrapper,
+.student-layout .main .el-textarea__inner,
+.student-layout .main .el-select-dropdown,
+.student-layout .main .el-message-box {
   --el-bg-color: #ffffff;
   --el-text-color-primary: #1f2937;
   --el-text-color-regular: #374151;
@@ -171,128 +180,159 @@ body {
   color: #1f2937;
 }
 
-.light-content .el-card {
+.light-content .el-card,
+.student-layout .main .el-card {
   border: 1px solid #e5e7eb;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
-.light-content .el-table {
+.light-content .el-table,
+.student-layout .main .el-table {
   background: #ffffff;
   border: 1px solid #e5e7eb;
 }
-.light-content .el-table th {
+.light-content .el-table th,
+.student-layout .main .el-table th {
   background: #f9fafb;
   color: #374151;
   font-weight: 600;
 }
-.light-content .el-table td {
+.light-content .el-table td,
+.student-layout .main .el-table td {
   color: #1f2937;
 }
-.light-content .el-table--striped .el-table__body tr.el-table__row--striped td {
+.light-content .el-table--striped .el-table__body tr.el-table__row--striped td,
+.student-layout .main .el-table--striped .el-table__body tr.el-table__row--striped td {
   background: #fafafa;
 }
-.light-content .el-table__body tr:hover > td {
+.light-content .el-table__body tr:hover > td,
+.student-layout .main .el-table__body tr:hover > td {
   background: #f3f4f6 !important;
 }
 
 .light-content .el-input__wrapper,
-.light-content .el-textarea__inner {
+.light-content .el-textarea__inner,
+.student-layout .main .el-input__wrapper,
+.student-layout .main .el-textarea__inner {
   background: #ffffff !important;
   border: 1px solid #d1d5db !important;
   color: #1f2937 !important;
 }
 .light-content .el-input__inner,
-.light-content .el-textarea__inner {
+.light-content .el-textarea__inner,
+.student-layout .main .el-input__inner,
+.student-layout .main .el-textarea__inner {
   color: #1f2937 !important;
 }
 .light-content .el-input__inner::placeholder,
-.light-content .el-textarea__inner::placeholder {
+.light-content .el-textarea__inner::placeholder,
+.student-layout .main .el-input__inner::placeholder,
+.student-layout .main .el-textarea__inner::placeholder {
   color: #9ca3af !important;
 }
 
-.light-content .el-button--default {
+.light-content .el-button--default,
+.student-layout .main .el-button--default {
   --el-button-bg-color: #ffffff;
   --el-button-border-color: #d1d5db;
   --el-button-text-color: #374151;
   --el-button-hover-text-color: #4facfe;
 }
-.light-content .el-button--primary {
+.light-content .el-button--primary,
+.student-layout .main .el-button--primary {
   --el-button-bg-color: linear-gradient(135deg, #4facfe, #00d4ff);
   --el-button-border-color: transparent;
   --el-button-text-color: #0a0e27;
 }
-.light-content .el-button--danger {
+.light-content .el-button--danger,
+.student-layout .main .el-button--danger {
   --el-button-bg-color: #fee2e2;
   --el-button-border-color: #fecaca;
   --el-button-text-color: #dc2626;
 }
 
-.light-content .el-tag--success {
+.light-content .el-tag--success,
+.student-layout .main .el-tag--success {
   --el-tag-bg-color: #d1fae5;
   --el-tag-border-color: #a7f3d0;
   --el-tag-text-color: #065f46;
 }
-.light-content .el-tag--warning {
+.light-content .el-tag--warning,
+.student-layout .main .el-tag--warning {
   --el-tag-bg-color: #fef3c7;
   --el-tag-border-color: #fde68a;
   --el-tag-text-color: #92400e;
 }
-.light-content .el-tag--danger {
+.light-content .el-tag--danger,
+.student-layout .main .el-tag--danger {
   --el-tag-bg-color: #fee2e2;
   --el-tag-border-color: #fecaca;
   --el-tag-text-color: #dc2626;
 }
-.light-content .el-tag--info {
+.light-content .el-tag--info,
+.student-layout .main .el-tag--info {
   --el-tag-bg-color: #dbeafe;
   --el-tag-border-color: #bfdbfe;
   --el-tag-text-color: #1e40af;
 }
 
-.light-content .el-pagination {
+.light-content .el-pagination,
+.student-layout .main .el-pagination {
   --el-pagination-bg-color: #ffffff;
   --el-pagination-text-color: #374151;
 }
-.light-content .el-pagination button {
+.light-content .el-pagination button,
+.student-layout .main .el-pagination button {
   background-color: #ffffff;
 }
-.light-content .el-pagination .el-pager li {
+.light-content .el-pagination .el-pager li,
+.student-layout .main .el-pagination .el-pager li {
   background-color: #ffffff;
   color: #374151;
 }
-.light-content .el-pagination .el-pager li.is-active {
+.light-content .el-pagination .el-pager li.is-active,
+.student-layout .main .el-pagination .el-pager li.is-active {
   background-color: #4facfe;
   color: #ffffff;
 }
 
-.light-content .el-dialog {
+.light-content .el-dialog,
+.student-layout .main .el-dialog {
   border: 1px solid #e5e7eb;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
 }
-.light-content .el-dialog__header {
+.light-content .el-dialog__header,
+.student-layout .main .el-dialog__header {
   border-bottom: 1px solid #e5e7eb;
   padding: 16px 20px;
 }
-.light-content .el-dialog__title {
+.light-content .el-dialog__title,
+.student-layout .main .el-dialog__title {
   color: #1f2937;
   font-weight: 600;
 }
-.light-content .el-dialog__body {
+.light-content .el-dialog__body,
+.student-layout .main .el-dialog__body {
   color: #374151;
   padding: 20px;
 }
 
-.light-content .el-descriptions {
+.light-content .el-descriptions,
+.student-layout .main .el-descriptions {
   background: #ffffff;
 }
-.light-content .el-descriptions__label {
+.light-content .el-descriptions__label,
+.student-layout .main .el-descriptions__label {
   background: #f9fafb;
   color: #6b7280;
   font-weight: 600;
 }
-.light-content .el-descriptions__content {
+.light-content .el-descriptions__content,
+.student-layout .main .el-descriptions__content {
   color: #1f2937;
 }
 
-.light-content .el-divider {
+.light-content .el-divider,
+.student-layout .main .el-divider {
   border-color: #e5e7eb;
 }

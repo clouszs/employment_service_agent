@@ -10,8 +10,8 @@ import ConversationList from '@/components/chat/ConversationList.vue'
 import MessageList from '@/components/chat/MessageList.vue'
 import ChatInput from '@/components/chat/ChatInput.vue'
 import SearchBox from '@/components/chat/SearchBox.vue'
-import DashboardPanels from '@/components/dashboard/DashboardPanels.vue'
 import ProfileDialog from '@/components/chat/ProfileDialog.vue'
+import StudentHotQuestions from '@/components/chat/StudentHotQuestions.vue'
 import * as chatApi from '@/api/chat'
 import * as annApi from '@/api/announcements'
 import type { ChatMessage } from '@/types/chat'
@@ -265,17 +265,10 @@ const isAdminOrEditor = computed(
       </el-main>
     </el-container>
 
-    <!-- 右侧面板：热门问题 + 监控摘要 -->
-    <el-aside width="340px" class="right-panel" v-if="isAdminOrEditor">
+    <!-- 右侧面板：学生端显示热门问题栏 -->
+    <el-aside width="340px" class="right-panel" v-if="!isAdminOrEditor">
       <div class="right-inner">
-        <el-card class="right-card" shadow="never">
-          <template #header>
-            <div class="right-card-head">
-              <span class="right-card-title">热门问题</span>
-            </div>
-          </template>
-          <HotQuestions @pick="onSend" />
-        </el-card>
+        <StudentHotQuestions @pick="onSend" />
       </div>
     </el-aside>
 

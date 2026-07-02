@@ -6,14 +6,14 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.core.response import success
 from app.models import SysUser
-from app.schemas.career import CalendarIcsRequest, JobQuery, ResumeGenerateRequest
+from app.schemas.career import CalendarIcsRequest, JobQuery, ResumeGenerateRequest, ResumeListResponse, ResumePDFResponse, ResumeRead, ResumeSaveRequest
 from app.services import calendar_service, job_service, resume_service
 
 router = APIRouter(prefix="/career", tags=["学生-生涯服务"])
@@ -32,6 +32,78 @@ def generate_resume(
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
     return success(result)
+
+
+@router.post("/resume/save", summary="保存简历", response_model=dict)
+def save_resume(
+    payload: ResumeSaveRequest,
+    db: Session = Depends(get_db),
+    current_user: SysUser = Depends(get_current_user),
+) -> dict:
+    obj = resume_service.save_resume(
+        db,
+        user_id=current_user.id,
+        title=payload.title,
+        content=payload.content,
+        is_default=payload.is_default,
+    )
+    return success(ResumeRead.model_validate(obj).model_dump(), message="保存成功")
+
+
+@router.get("/resume/list", summary="我的简历列表")
+def list_resumes(
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: SysUser = Depends(get_current_user),
+) -> dict:
+    rows, total = resume_service.list_user_resumes(db, current_user.id, page=page, size=size)
+    return success(
+        {
+            "total": total,
+            "page": page,
+            "size": size,
+            "items": [ResumeRead.model_validate(r).model_dump() for r in rows],
+        }
+    )
+
+
+@router.delete("/resume/{resume_id}", summary="删除简历")
+def delete_resume(
+    resume_id: int,
+    db: Session = Depends(get_db),
+    current_user: SysUser = Depends(get_current_user),
+) -> dict:
+    ok = resume_service.delete_user_resume(db, resume_id, current_user.id)
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="简历不存在")
+    return success(message="已删除")
+
+
+@router.post("/resume/{resume_id}/default", summary="设为默认简历")
+def set_default(
+    resume_id: int,
+    db: Session = Depends(get_db),
+    current_user: SysUser = Depends(get_current_user),
+) -> dict:
+    obj = resume_service.set_default_resume(db, resume_id, current_user.id)
+    if obj is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="简历不存在")
+    return success(ResumeRead.model_validate(obj).model_dump(), message="已设为默认")
+
+
+@router.get("/resume/{resume_id}/pdf", summary="下载简历 PDF")
+def download_resume_pdf(
+    resume_id: int,
+    db: Session = Depends(get_db),
+    current_user: SysUser = Depends(get_current_user),
+):
+    try:
+        abs_path, filename = resume_service.generate_resume_pdf(db, resume_id, current_user.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    from fastapi.responses import FileResponse
+    return FileResponse(abs_path, filename=filename, media_type="application/pdf")
 
 
 @router.post("/jobs", summary="职位推荐（基于知识库检索）")

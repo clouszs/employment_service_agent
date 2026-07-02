@@ -53,12 +53,29 @@ START → route → [search | direct | refuse]
                     ↓
          [generate | regenerate | refuse]
                     ↓
-         check_consistency → verify_facts → content_moderation
+         check_consistency → verify_facts
                     ↓
-              [accept | accept_with_warning | refuse]
-                    ↓
-                   error_handler → END
+           [accept | regenerate | refuse]
+            ↙          |              \
+        accept      regenerate        refuse
+          ↓              ↓               ↓
+ content_moderation  verify_facts    refuse
+          ↓           ↙   \
+     [accept |        accept  regenerate
+      accept_with_warning ↓      ↓
+           ↓         content_moderation  (retry < MAX)
+     error_handler           ↓
+           ↓           [accept | accept_with_warning | refuse]
+           →──────────────── error_handler
+                              ↓
+                               END
 ```
+
+说明：
+- 三阶段审查后进入自校正闭环：`verify_facts → regenerate → verify_facts`。
+- `verify_facts` 根据 `should_retry` / `should_refuse` 做条件分支。
+- `regenerate_with_hints` 递增 `retry_attempt`，超过 `MAX_REGENERATE_RETRY=2` 后熔断到 `content_moderation`。
+- 其余兜底/错误处理路径保持不变。
 
 **关键防护配置：**
 
@@ -71,6 +88,7 @@ START → route → [search | direct | refuse]
 | 最大重试 | 3 次后降级 | `check_confidence` 节点 |
 | 严重度分级 | high 重试，medium 警告 | `check_consistency` 节点 |
 | 重生成限制 | 最多 2 次 | `regenerate_with_hints` 节点 |
+| 事实核验决策 | `should_retry` / `should_refuse` | `verify_facts` 节点 |
 | 内容审核 | 输出侧关键词匹配 | `content_moderation` 节点 |
 
 #### 操作 2-3：创建 refusal_handler.py

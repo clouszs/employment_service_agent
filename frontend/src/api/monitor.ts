@@ -65,3 +65,15 @@ export function getRefusalList(params: RefusalListQuery): Promise<PageResult<Age
 export function getRefusalStats(): Promise<RefusalStats> {
   return request.get('/refusal/stats')
 }
+
+// ==================== LangSmith ====================
+export interface LangSmithTogglePayload {
+  enabled: boolean
+  api_key?: string
+  project?: string
+  endpoint?: string
+}
+
+export function toggleLangSmith(payload: LangSmithTogglePayload): Promise<{ enabled: boolean }> {
+  return request.post('/admin/conversations/langsmith/toggle', payload)
+}

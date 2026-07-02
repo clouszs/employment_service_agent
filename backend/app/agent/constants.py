@@ -3,6 +3,9 @@
 # ===== 检索 =====
 DEFAULT_TOP_K = 5  # 默认检索召回条数
 
+# ===== 自校正闭环 =====
+MAX_REGENERATE_RETRY = 2  # 最多重生成次数，超出则熔断到 content_moderation
+
 # ===== LLM 温度 =====
 DEFAULT_TEMPERATURE = 0.3  # 回答生成温度（低=稳定、高=多样）
 

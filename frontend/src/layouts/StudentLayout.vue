@@ -73,7 +73,7 @@ function onLogout() {
       </div>
     </el-aside>
 
-    <el-main class="main light-content">
+    <el-main class="main">
       <router-view />
     </el-main>
   </el-container>
@@ -87,8 +87,8 @@ function onLogout() {
 .sidebar {
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, #0d1b34 0%, #0a1226 100%);
-  border-right: 1px solid rgba(56, 189, 248, 0.18);
+  background: #1e293b;
+  border-right: 1px solid #334155;
   padding: 20px 16px;
 }
 .brand {
@@ -101,7 +101,6 @@ function onLogout() {
 .logo-mark {
   font-size: 24px;
   color: #38bdf8;
-  text-shadow: 0 0 12px rgba(56, 189, 248, 0.8);
 }
 .logo-text {
   font-size: 16px;
@@ -111,6 +110,13 @@ function onLogout() {
 .new-chat-btn {
   width: 100%;
   margin-bottom: 20px;
+  background-color: #334155;
+  border: 1px solid #475569;
+  color: #e0f2fe;
+  transition: background-color 0.2s;
+}
+.new-chat-btn:hover {
+  background-color: #475569;
 }
 .menu-scrollbar {
   flex: 1;

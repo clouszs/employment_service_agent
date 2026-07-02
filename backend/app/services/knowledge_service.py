@@ -96,14 +96,14 @@ def get_document(db: Session, document_id: int) -> Optional[KbDocument]:
 
 
 def save_upload_file(file_bytes: bytes, filename: str) -> tuple[str, str, int]:
-    """保存上传文件到本地，返回 (相对路径, sha256, 大小)。"""
+    """保存上传文件到本地，返回 (绝对路径, sha256, 大小)。"""
     file_hash = hashlib.sha256(file_bytes).hexdigest()
     ext = Path(filename).suffix
     sub = Path(settings.upload_dir) / file_hash[:2]
     sub.mkdir(parents=True, exist_ok=True)
     dest = sub / f"{file_hash}{ext}"
     dest.write_bytes(file_bytes)
-    return str(dest).replace("\\", "/"), file_hash, len(file_bytes)
+    return str(dest.resolve()).replace("\\", "/"), file_hash, len(file_bytes)
 
 
 def create_document(db: Session, fields: dict) -> KbDocument:

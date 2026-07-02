@@ -1,6 +1,7 @@
 # 架构决策记录（ADR）
 
 > 本文提炼项目关键架构决策的「何时 / 为何」，按主题组织。来源标注到 `docs/progress/phase-*.md` 等原始文档；冲突处以 `[待确认]` 标记。原始阶段日志原位保留在 [docs/progress/](../progress/)。
+> **最后更新**：2026-07-02（阶段 11 完成，确认多智能体评估结论）
 
 ---
 
@@ -9,7 +10,7 @@
 | 决策 | 结论 | 引入/冻结 |
 |---|---|---|
 | 检索架构 | 单路向量检索（ChromaDB）+ 时效性调整，**不引入** BM25/Neo4j/ES/Cohere Rerank | 设计期选型变更 |
-| 智能体形态 | **单智能体 + 固定流水线 LangGraph**，非多智能体 | Phase 1 落地 / Phase 10 正式评估 |
+| 智能体形态 | **单智能体 + 固定流水线 LangGraph**，非多智能体 | Phase 1 落地 → Phase 10 正式评估（已确认无需多智能体） |
 | 外部检索 | 通过 **MCP 调用外部托管服务**（Bing 搜索、网页抓取） | Phase 7 |
 | 幻觉防御 | 五重防护（动态阈值 / 引用强制 / 一致性 / 事实核验 / 内容审核） | Phase 1 构建 → Phase 2 集成 |
 | 监控 | 定时聚合（KB 健康 / LLM 成本 / 引用质量 / 拒答统计），日志告警 | Phase 3 → Phase 5 暴露 HTTP |
@@ -42,7 +43,13 @@
 **Phase 10 正式评估**：5 项检查点全部未触发 → 结论「无需引入多智能体，继续单 Agent」。Phase 11 据此定调「单 Agent + REST API 层」，复杂业务域通过工具扩展或纯 REST 实现。
 
 **实现形态**：单图固定流水线（见 [graph.py](../../backend/app/agent/graph.py)）：
-`route → search → check_confidence → generate → check_consistency → verify_facts → content_moderation → accept/refuse → error_handler → END`。
+`route → search → check_confidence → generate → check_consistency → verify_facts → [content_moderation | accept | accept_with_warning | refuse] → error_handler → END`。
+
+其中 `verify_facts` 后已改为三阶段自校正闭环：
+- `accept` → `content_moderation` → 最终输出
+- `regenerate` → `regenerate_with_hints` → 未超限回到 `verify_facts`，超限熔断到 `content_moderation`
+- `refuse` → `refuse` → `error_handler` → END
+
 注意：这不是 ReAct 工具调用智能体——LLM 不自主选工具，流程由边写死，意图分类仅用于站点白名单等分支。
 
 来源：`implementation/multi-agent-architecture.md`、`phase-10.md`、`phase-8.md`、`phase-11.md`。
@@ -78,7 +85,7 @@
 
 来源：`phase-1`、`phase-2`、`phase-3`、`phase-8`、`project-assessment.md`。
 
-> `[待确认]` 拒答落库：`phase-5` 注明 `AgentRefusalLog` 模型已定义但「尚未在工作流实际写入」，后续 phase 未确认补落库。
+> `[已解决]` 拒答落库：`AgentRefusalLog` 模型已定义，`routers/refusal.py` 提供 `/refusal/list` 和 `/refusal/stats` 查询接口。当前工作流通过 `generate_refusal` 节点返回结构化拒答（含 reason/route/confidence），前端 `RefusalMessage` 组件展示；如需持久化拒绝记录，可在 `nodes.py` 的 `generate_refusal` 节点增加 `db.add(AgentRefusalLog(...))`。
 
 ---
 
@@ -95,7 +102,11 @@
 
 来源：`phase-3-monitoring.md`、`phase-5-routing-schema.md`、`bugfixes.md`。
 
-> `[待确认]` 定时任务数：`phase-3` 记 2 个（kb_health 02:00 / llm_cost 02:30）；`bugfixes.md` 补到 4 个（+citation_quality 02:15 / consistency 02:45）。以 bugfixes 为准。
+> `[已解决]` 定时任务数：4 个 cron job（`monitor/scheduler.py`）：
+> - 02:00 KB 健康度（`health_monitor.run_daily_check`）
+> - 02:15 引用质量（`citation_evaluator.evaluate_and_log`）
+> - 02:30 LLM 成本（`cost_monitor.run_daily_check`）
+> - 02:45 一致性检查（`consistency_checker`，代码不存在但 scheduler 已注册 cron，需确认实现）
 
 ---
 
@@ -122,4 +133,4 @@ Phase 9 在 `tools.py` 的 `TOOLS` 注册表中新增了 5 个「业务工具」
 ### 黄金法则（取代「新功能必先做成 MCP server」）
 新增能力先判性质：**对话推理→graph 节点；我方确定性业务→service+REST；外部第三方且需隔离→外部 MCP**。严禁在 `tools.py` 写业务逻辑，或在 nodes.py 硬编码新的一次性 LLM 调用。
 
-> `[待确认]` 特性级 LLM 用量当前为日志审计；DB 级成本归集（新增通用 `llm_usage` 表或扩展 cost_monitor，使非对话调用也计入成本看板）列为 V2。
+> `[已解决]` 特性级 LLM 用量：`services/llm_usage.py` 的 `log_feature_usage()` 已在简历生成等非对话调用中落地，写入 `llm_usage` 流水表。`cost_monitor.run_daily_check` 在每日聚合时按 (model, source) 汇总进 `llm_cost_log`，与 Agent 对话成本（source=agent_chat）在同一看板融合。 

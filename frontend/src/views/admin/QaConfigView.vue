@@ -1,38 +1,53 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
-import { Lock } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Lock, Plus, Delete, SwitchButton } from '@element-plus/icons-vue'
 import * as settingsApi from '@/api/app-configs'
-import type { AppConfig } from '@/api/settings'
+import type { AppConfig } from '@/api/app-configs'
 
-const GROUPS = [
+/** 问答策略预设分组 */
+const QA_GROUPS = [
   { key: 'qa_strategy', label: '问答策略' },
   { key: 'qa_retrieval', label: '检索参数' },
   { key: 'qa_model', label: '模型配置' },
   { key: 'qa_other', label: '其他' },
 ]
 
-const activeGroup = ref(GROUPS[0].key)
+const activeGroup = ref(QA_GROUPS[0].key)
 const loading = ref(false)
 const saving = ref(false)
+const deletingId = ref<number | null>(null)
 const allConfigs = ref<AppConfig[]>([])
 const originalSnapshot = reactive<Record<number, AppConfig>>({})
-
 const editingRows = reactive<Record<number, boolean>>({})
 const editCache = reactive<Record<number, AppConfig>>({})
 
+const dialogVisible = ref(false)
+const dialogMode = ref<'create' | 'edit'>('create')
+const editingRowId = ref<number | null>(null)
+const form = reactive<Partial<AppConfig>>({
+  config_key: '',
+  config_value: '',
+  description: '',
+  group_name: QA_GROUPS[0].key,
+  is_sensitive: 0,
+  status: 1,
+})
+
+/** 过滤出 qa_ 前缀配置 */
 const qaConfigs = computed<AppConfig[]>(() =>
   allConfigs.value.filter((item) => item.config_key.startsWith('qa_')),
 )
 
+/** 按分组归类 */
 const groupedData = computed<Record<string, AppConfig[]>>(() => {
   const map: Record<string, AppConfig[]> = {}
-  for (const g of GROUPS) map[g.key] = []
+  for (const g of QA_GROUPS) map[g.key] = []
   for (const item of qaConfigs.value) {
-    const g = (item.group_name && map[item.group_name] !== undefined)
+    const group = item.group_name && map[item.group_name] !== undefined
       ? item.group_name
       : 'qa_other'
-    map[g].push(item)
+    map[group].push(item)
   }
   for (const k of Object.keys(map)) {
     map[k].sort((a, b) => a.config_key.localeCompare(b.config_key))
@@ -47,6 +62,71 @@ const dirtyCount = computed(() => {
   }
   return n
 })
+
+function openCreateDialog() {
+  dialogMode.value = 'create'
+  editingRowId.value = null
+  Object.assign(form, {
+    config_key: 'qa_',
+    config_value: '',
+    description: '',
+    group_name: activeGroup.value,
+    is_sensitive: 0,
+    status: 1,
+  })
+  dialogVisible.value = true
+}
+
+function openEditDialog(row: AppConfig) {
+  dialogMode.value = 'edit'
+  editingRowId.value = row.id
+  Object.assign(form, {
+    config_key: row.config_key,
+    config_value: row.config_value,
+    description: row.description ?? '',
+    group_name: row.group_name ?? 'qa_other',
+    is_sensitive: row.is_sensitive,
+    status: row.status,
+  })
+  dialogVisible.value = true
+}
+
+async function submitDialog() {
+  if (!form.config_key) {
+    ElMessage.warning('请填写配置键')
+    return
+  }
+  if (!String(form.config_key).startsWith('qa_')) {
+    ElMessage.warning('问答策略配置的 key 必须以 qa_ 开头')
+    return
+  }
+  try {
+    if (dialogMode.value === 'create') {
+      await settingsApi.createConfig({
+        config_key: form.config_key,
+        config_value: form.config_value ?? '',
+        description: form.description ?? null,
+        group_name: form.group_name || 'qa_other',
+        is_sensitive: form.is_sensitive ?? 0,
+        status: form.status ?? 1,
+      })
+      ElMessage.success('配置已创建')
+    } else if (editingRowId.value) {
+      await settingsApi.updateAppConfig(editingRowId.value, {
+        config_value: form.config_value ?? '',
+        description: form.description ?? null,
+        group_name: form.group_name || 'qa_other',
+        is_sensitive: form.is_sensitive ?? 0,
+        status: form.status ?? 1,
+      })
+      ElMessage.success('配置已更新')
+    }
+    dialogVisible.value = false
+    await loadAll()
+  } catch {
+    ElMessage.error('操作失败，请重试')
+  }
+}
 
 function startEdit(id: number): void {
   const row = allConfigs.value.find((r) => r.id === id)
@@ -109,6 +189,35 @@ function resetAll(): void {
   ElMessage.info('已放弃未保存的修改')
 }
 
+async function handleDelete(row: AppConfig) {
+  try {
+    await ElMessageBox.confirm(`确定删除配置「${row.config_key}」吗？`, '确认删除', { type: 'warning' })
+  } catch {
+    return
+  }
+  deletingId.value = row.id
+  try {
+    await settingsApi.deleteConfig(row.id)
+    ElMessage.success('配置已删除')
+    await loadAll()
+  } catch {
+    ElMessage.error('删除失败，请重试')
+  } finally {
+    deletingId.value = null
+  }
+}
+
+async function handleToggle(row: AppConfig) {
+  try {
+    const next = row.status === 1 ? 0 : 1
+    await settingsApi.toggleAppConfigStatus(row.id, next)
+    ElMessage.success(next === 1 ? '已启用' : '已禁用')
+    await loadAll()
+  } catch {
+    ElMessage.error('操作失败，请重试')
+  }
+}
+
 function maskedValue(v: string): string {
   if (!v) return '（空）'
   if (v.length <= 4) return '****'
@@ -118,13 +227,11 @@ function maskedValue(v: string): string {
 async function loadAll(): Promise<void> {
   loading.value = true
   try {
-    const res = await settingsApi.listAppConfigs({})
+    const res = await settingsApi.listConfigs({})
     allConfigs.value = res.items
     Object.assign(
       originalSnapshot,
-      Object.fromEntries(
-        res.items.map((item: AppConfig) => [item.id, { ...item }]),
-      ),
+      Object.fromEntries(res.items.map((item: AppConfig) => [item.id, { ...item }])),
     )
     const liveIds = new Set(res.items.map((i: AppConfig) => i.id))
     for (const id of Object.keys(editingRows)) {
@@ -147,23 +254,24 @@ onMounted(loadAll)
   <div class="qa-config-page">
     <div class="page-header">
       <h2>智能问答配置</h2>
-      <p class="subtitle">管理问答策略、检索参数和模型配置（仅展示 config_key 以 qa_ 开头的配置项）</p>
+      <p class="subtitle">
+        管理问答策略、检索参数和模型配置（仅展示 config_key 以 qa_ 开头的配置项）
+      </p>
     </div>
 
     <div class="toolbar">
-      <el-button type="primary" :loading="saving" @click="saveAll">
+      <el-button type="primary" :icon="Plus" @click="openCreateDialog">新建配置</el-button>
+      <el-button :loading="saving" @click="saveAll">
         {{ saving ? '保存中...' : '保存全部修改' }}
       </el-button>
       <el-button @click="resetAll">放弃修改</el-button>
-      <span v-if="dirtyCount > 0" class="dirty-hint">
-        有 {{ dirtyCount }} 项未保存
-      </span>
+      <span v-if="dirtyCount > 0" class="dirty-hint">有 {{ dirtyCount }} 项未保存</span>
       <el-button @click="loadAll" :loading="loading">刷新</el-button>
     </div>
 
     <el-tabs v-model="activeGroup" type="border-card" class="group-tabs">
       <el-tab-pane
-        v-for="group in GROUPS"
+        v-for="group in QA_GROUPS"
         :key="group.key"
         :label="group.label"
         :name="group.key"
@@ -172,12 +280,7 @@ onMounted(loadAll)
           <span class="tab-label">{{ group.label }}</span>
         </template>
 
-        <el-table
-          :data="groupedData[group.key]"
-          :loading="loading"
-          stripe
-          style="width: 100%"
-        >
+        <el-table :data="groupedData[group.key]" :loading="loading" stripe style="width: 100%">
           <el-table-column label="配置键" min-width="220">
             <template #default="{ row }">
               <code class="key-cell">{{ row.config_key }}</code>
@@ -208,7 +311,7 @@ onMounted(loadAll)
             </template>
           </el-table-column>
 
-          <el-table-column label="说明" width="200">
+          <el-table-column label="说明" width="220">
             <template #default="{ row }">
               <el-input
                 v-if="editingRows[row.id]"
@@ -223,11 +326,42 @@ onMounted(loadAll)
             </template>
           </el-table-column>
 
-          <el-table-column label="状态" width="90" align="center">
+          <el-table-column label="状态" width="100" align="center">
             <template #default="{ row }">
-              <el-tag :type="row.status === 1 ? 'success' : 'info'" size="small">
+              <el-tag :type="row.status === 1 ? 'success' : 'info'" size="small" effect="plain">
                 {{ row.status === 1 ? '启用' : '禁用' }}
               </el-tag>
+            </template>
+          </el-table-column>
+
+          <el-table-column label="操作" width="180" align="center" fixed="right">
+            <template #default="{ row }">
+              <el-button
+                v-if="row.is_sensitive !== 1"
+                text
+                type="primary"
+                size="small"
+                @click="startEdit(row.id)"
+              >
+                编辑
+              </el-button>
+              <el-button
+                text
+                type="warning"
+                size="small"
+                :icon="SwitchButton"
+                @click="handleToggle(row)"
+              >
+                {{ row.status === 1 ? '禁用' : '启用' }}
+              </el-button>
+              <el-button
+                text
+                type="danger"
+                size="small"
+                :icon="Delete"
+                :loading="deletingId === row.id"
+                @click="handleDelete(row)"
+              />
             </template>
           </el-table-column>
         </el-table>
@@ -238,23 +372,56 @@ onMounted(loadAll)
       </el-tab-pane>
     </el-tabs>
 
-    <el-empty
-      v-if="qaConfigs.length === 0 && !loading"
-      description="暂无 qa_ 前缀配置项"
-      class="empty-tip"
+    <div v-if="qaConfigs.length === 0 && !loading" class="empty-tip">
+      <el-empty description="暂无 qa_ 前缀配置项">
+        <template #extra>
+          <el-text type="info" size="small">
+            请在「系统设置」中新建 key 以 qa_ 开头的配置项
+          </el-text>
+        </template>
+      </el-empty>
+    </div>
+
+    <!-- 新建 / 编辑弹窗 -->
+    <el-dialog
+      v-model="dialogVisible"
+      :title="dialogMode === 'create' ? '新建配置' : '编辑配置'"
+      width="520px"
+      @closed="editingRowId = null"
     >
-      <template #extra>
-        <el-text type="info" size="small">
-          请在「系统设置」中新建 group_name 为问答策略/检索参数/模型配置 的 qa_ 配置项
-        </el-text>
+      <el-form :model="form" label-width="100px">
+        <el-form-item label="配置键" required>
+          <el-input v-model="form.config_key" placeholder="如 qa_strategy.max_tokens" />
+        </el-form-item>
+        <el-form-item label="当前值">
+          <el-input v-model="form.config_value" placeholder="配置值" type="textarea" :rows="2" />
+        </el-form-item>
+        <el-form-item label="说明">
+          <el-input v-model="form.description" placeholder="可选说明" />
+        </el-form-item>
+        <el-form-item label="分组">
+          <el-select v-model="form.group_name" placeholder="选择分组" style="width: 100%">
+            <el-option v-for="g in QA_GROUPS" :key="g.key" :label="g.label" :value="g.key" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="敏感">
+          <el-switch v-model="form.is_sensitive" :active-value="1" :inactive-value="0" />
+        </el-form-item>
+        <el-form-item label="状态">
+          <el-switch v-model="form.status" :active-value="1" :inactive-value="0" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="submitDialog">确定</el-button>
       </template>
-    </el-empty>
+    </el-dialog>
   </div>
 </template>
 
 <style scoped>
 .qa-config-page {
-  max-width: 960px;
+  max-width: 1100px;
 }
 .page-header {
   margin-bottom: 16px;

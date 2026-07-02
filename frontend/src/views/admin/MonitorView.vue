@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
+import { ElMessage } from 'element-plus'
 import { Refresh, Timer } from '@element-plus/icons-vue'
+import * as echarts from 'echarts'
 import { storeToRefs } from 'pinia'
 import { useMonitorStore } from '@/stores/monitor'
 import * as monitorApi from '@/api/monitor'
@@ -28,10 +30,15 @@ const yearOptions = Array.from({ length: 5 }, (_, i) => ({ label: `${new Date().
 
 // 健康检查
 const runningHealthCheck = ref(false)
+const langsmithEnabled = ref(false)
+const langsmithLoading = ref(false)
+const trendChartEl = ref<HTMLElement | null>(null)
 
 async function loadAll() {
   await monitorStore.refreshDashboardCards()
   await Promise.all([loadHealthHistory(), loadCostHistory(), loadRefusalList()])
+  await nextTick()
+  renderTrendChart()
 }
 
 async function loadHealthHistory() {
@@ -40,6 +47,24 @@ async function loadHealthHistory() {
   } catch {
     // ignore
   }
+}
+
+function renderTrendChart() {
+  if (!trendChartEl.value) return
+  const items = (healthHistory.value.items || []).slice().reverse()
+  const labels = items.map((item) => item.check_date || '')
+  const series = items.map((item) => item.health_score != null ? Number(Math.round(item.health_score)) : null)
+  const xData = labels.length ? labels : ['']
+  const sData = series.length ? series : [0]
+  const chart = echarts.init(trendChartEl.value)
+  chart.setOption({
+    title: { text: '健康度趋势', left: 'center', textStyle: { fontSize: 14, color: '#334155' } },
+    tooltip: { trigger: 'axis' },
+    grid: { top: 40, right: 20, bottom: 24, left: 44 },
+    xAxis: { type: 'category', data: xData, axisLabel: { color: '#64748b', fontSize: 11 } },
+    yAxis: { type: 'value', min: 0, max: 100, axisLabel: { formatter: '{value}', color: '#64748b', fontSize: 11 } },
+    series: [{ data: sData, type: 'line', smooth: true, symbol: 'circle', symbolSize: 6, itemStyle: { color: '#38bdf8' }, areaStyle: { color: 'rgba(56,189,248,0.12)' } }],
+  })
 }
 
 async function loadCostHistory() {
@@ -87,9 +112,23 @@ async function onRefresh() {
   }
 }
 
+async function toggleLangSmith() {
+  langsmithLoading.value = true
+  try {
+    await monitorApi.toggleLangSmith({ enabled: !langsmithEnabled.value })
+    langsmithEnabled.value = !langsmithEnabled.value
+    ElMessage.success(`LangSmith 已${langsmithEnabled.value ? '开启' : '关闭'}`)
+  } catch (err: any) {
+    ElMessage.error(err?.message || '操作失败')
+  } finally {
+    langsmithLoading.value = false
+  }
+}
+
 onMounted(() => {
   loadAll()
   loadMonthlyCost()
+  langsmithEnabled.value = !!localStorage.getItem('langsmith_enabled')
 })
 </script>
 
@@ -105,6 +144,9 @@ onMounted(() => {
           健康检查
         </el-button>
         <el-button :icon="Refresh" @click="onRefresh">刷新</el-button>
+        <el-button :type="langsmithEnabled ? 'danger' : 'success'" :loading="langsmithLoading" @click="toggleLangSmith">
+          {{ langsmithEnabled ? 'LangSmith 已开启，点击关闭' : 'LangSmith 已关闭，点击开启' }}
+        </el-button>
       </div>
     </div>
 
@@ -152,25 +194,28 @@ onMounted(() => {
                 <span class="list-title">历史记录</span>
               </div>
             </template>
-            <el-table :data="healthHistory.items" stripe>
-              <el-table-column prop="check_date" label="检查日期" width="140" />
-              <el-table-column prop="total_docs" label="总文档" width="90" align="center" />
-              <el-table-column prop="current_docs" label="生效文档" width="100" align="center" />
-              <el-table-column prop="warning_docs" label="即将过期" width="110" align="center" />
-              <el-table-column prop="expired_docs" label="已过期" width="100" align="center" />
-              <el-table-column prop="avg_freshness" label="平均新鲜度" width="120" align="center">
-                <template #default="{ row }">
-                  {{ row.avg_freshness != null ? (row.avg_freshness * 100).toFixed(1) + '%' : '-' }}
-                </template>
-              </el-table-column>
-              <el-table-column prop="health_score" label="健康度" width="110" align="center">
-                <template #default="{ row }">
-                  <el-tag :type="(row.health_score ?? 0) >= 80 ? 'success' : (row.health_score ?? 0) >= 60 ? 'warning' : 'danger'" effect="plain">
-                    {{ row.health_score != null ? Math.round(row.health_score) : '-' }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-            </el-table>
+            <div class="table-chart-row">
+              <el-table :data="healthHistory.items" stripe table-layout="auto" class="health-table">
+                <el-table-column prop="check_date" label="检查日期" min-width="120" />
+                <el-table-column prop="total_docs" label="总文档" min-width="80" align="center" />
+                <el-table-column prop="current_docs" label="生效文档" min-width="90" align="center" />
+                <el-table-column prop="warning_docs" label="即将过期" min-width="100" align="center" />
+                <el-table-column prop="expired_docs" label="已过期" min-width="90" align="center" />
+                <el-table-column prop="avg_freshness" label="平均新鲜度" min-width="100" align="center">
+                  <template #default="{ row }">
+                    {{ row.avg_freshness != null ? (row.avg_freshness * 100).toFixed(1) + '%' : '-' }}
+                  </template>
+                </el-table-column>
+                <el-table-column prop="health_score" label="健康度" min-width="90" align="center">
+                  <template #default="{ row }">
+                    <el-tag :type="(row.health_score ?? 0) >= 80 ? 'success' : (row.health_score ?? 0) >= 60 ? 'warning' : 'danger'" effect="plain">
+                      {{ row.health_score != null ? Math.round(row.health_score) : '-' }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <div ref="trendChartEl" class="trend-chart" />
+            </div>
           </el-card>
         </div>
       </el-tab-pane>
@@ -382,9 +427,21 @@ onMounted(() => {
 }
 .list-card {
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.75);
-  border: 1px solid rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(14px);
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+.list-card :deep(.el-card__body) {
+  background: #ffffff;
+}
+.list-card :deep(.el-table) {
+  background: #ffffff;
+}
+.list-card :deep(.el-table__body-wrapper) {
+  background: #ffffff;
+}
+.list-card :deep(.el-table__header-wrapper) {
+  background: #f8fafc;
 }
 .list-head {
   display: flex;
@@ -395,7 +452,32 @@ onMounted(() => {
   font-weight: 600;
   color: #334155;
 }
+.table-chart-row {
+  display: flex;
+  gap: 16px;
+  align-items: stretch;
+}
+.health-table {
+  flex: 1 1 auto;
+}
+.trend-chart {
+  width: 380px;
+  min-width: 320px;
+  height: 100%;
+  min-height: 220px;
+  background: #ffffff;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  padding: 10px;
+}
 @media (max-width: 1200px) {
+  .table-chart-row {
+    flex-direction: column;
+  }
+  .trend-chart {
+    width: 100%;
+    min-width: unset;
+  }
   .summary-row {
     grid-template-columns: 1fr;
   }

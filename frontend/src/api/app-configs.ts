@@ -1,18 +1,10 @@
 import request from './request'
 import type { PageResult } from '@/types/api'
+import type { AppConfig } from './settings'
 
-/** 系统配置条目 */
-export interface AppConfigItem {
-  id: number
-  config_key: string
-  config_value: string
-  description: string | null
+/** 系统配置条目（系统设置视图使用，含 group_name） */
+export interface AppConfigItem extends AppConfig {
   group_name: string | null
-  is_sensitive: number
-  status: number
-  updated_by: number | null
-  created_at: string | null
-  updated_at: string | null
 }
 
 export interface AppConfigQuery {
@@ -24,6 +16,11 @@ export interface AppConfigQuery {
 export function listAppConfigs(
   params?: AppConfigQuery,
 ): Promise<PageResult<AppConfigItem>> {
+  return request.get('/app-configs', { params })
+}
+
+/** 获取配置列表（兼容 settings 视图导入） */
+export function listConfigs(params: { group_name?: string; keyword?: string; page?: number; size?: number }): Promise<PageResult<AppConfig>> {
   return request.get('/app-configs', { params })
 }
 
@@ -46,4 +43,24 @@ export function toggleAppConfigStatus(
   status: number,
 ): Promise<AppConfigItem> {
   return request.put(`/app-configs/${id}`, { status })
+}
+
+/** 创建新配置项（供系统设置和问答策略视图复用） */
+export function createConfig(payload: Partial<AppConfigItem>): Promise<AppConfigItem> {
+  return request.post('/app-configs', payload)
+}
+
+/** 创建或更新配置（upsert） */
+export function upsertConfig(payload: Partial<AppConfigItem>): Promise<AppConfigItem> {
+  return request.post('/app-configs/upsert', payload)
+}
+
+/** 删除配置项 */
+export function deleteConfig(id: number): Promise<unknown> {
+  return request.delete(`/app-configs/${id}`)
+}
+
+/** 初始化默认问答配置 */
+export function seedDefaults(): Promise<{ seeded: number }> {
+  return request.post('/app-configs/seed-defaults', {})
 }

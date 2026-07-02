@@ -196,12 +196,35 @@ onMounted(load)
 .page-header h2 {
   margin: 0 0 4px;
   font-size: 20px;
-  color: #e2e8f0;
+  color: #1e293b;
 }
 .subtitle {
   margin: 0;
   font-size: 13px;
-  color: #94a3b8;
+  color: #6b7280;
+}
+/* 表格卡片化，增强可读性 */
+:deep(.el-table) {
+  background: #ffffff;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+}
+:deep(.el-table th.el-table__cell) {
+  background: #f8fafc;
+  color: #374151;
+  font-weight: 600;
+  border-bottom: 1px solid #e5e7eb;
+}
+:deep(.el-table td.el-table__cell) {
+  color: #374151;
+  border-bottom: 1px solid #f1f5f9;
+}
+:deep(.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell) {
+  background: #f9fafb;
+}
+:deep(.el-table__body tr:hover > td.el-table__cell) {
+  background: #eff6ff;
 }
 .snippet-cell {
   display: flex;
@@ -211,16 +234,20 @@ onMounted(load)
 }
 .snippet-icon {
   margin-top: 3px;
-  color: #7dd3fc;
+  color: #3b82f6;
   flex-shrink: 0;
 }
 .note-preview {
-  color: #fbbf24;
+  color: #d97706;
   font-size: 13px;
 }
 .note-empty {
-  color: #64748b;
+  color: #9ca3af;
   font-size: 13px;
+}
+/* 操作按钮加强 */
+:deep(.el-button--primary) {
+  font-weight: 500;
 }
 .pagination-wrap {
   display: flex;

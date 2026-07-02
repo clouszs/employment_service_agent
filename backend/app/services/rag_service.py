@@ -2,6 +2,12 @@
 
 策略：纯向量检索 Top-K；最高分低于阈值走"无法回答"兜底，不调 LLM 编造。
 落库：写入 qa_message(问与答) + qa_message_reference(引用溯源) + op_query_log。
+支持从系统配置读取检索参数，未配置时回退到 settings 默认值。
+
+FAQ 命中链路（分两步）：
+  1. 语义匹配：向量检索 FAQ 集合，相似度达标 → 直接返回标准答案，并累加 hit_count。
+  2. 模糊匹配：语义未命中时，用 rapidfuzz 对所有启用的 FAQ 问题做模糊匹配，
+     达到阈值 → 视为"有效问题命中"，累加 ask_count（不直接返回答案，仍走检索/LLM）。
 """
 
 import logging
@@ -24,7 +30,7 @@ from app.models import (
     QaMessage,
     QaMessageReference,
 )
-from app.services import ops_service
+from app.services import app_config_service, ops_service
 from app.utils.conversation import resolve_conversation
 
 logger = logging.getLogger(__name__)
@@ -56,10 +62,35 @@ _SYSTEM_PROMPT = (
 )
 
 
+# ==================== 配置读取 ====================
+def _get_int_config(db: Session, key: str, default: int) -> int:
+    """读取整数配置，失败时返回默认值。"""
+    try:
+        val = app_config_service.get_qa_config_value(db, key)
+        if val is not None:
+            return int(val)
+    except Exception as e:  # pragma: no cover - 防御性降级
+        logger.warning("读取配置失败 key=%s: %s", key, e)
+    return default
+
+
+def _get_float_config(db: Session, key: str, default: float) -> float:
+    """读取浮点配置，失败时返回默认值。"""
+    try:
+        val = app_config_service.get_qa_config_value(db, key)
+        if val is not None:
+            return float(val)
+    except Exception as e:  # pragma: no cover - 防御性降级
+        logger.warning("读取配置失败 key=%s: %s", key, e)
+    return default
+
+
 # ==================== 检索 ====================
 def search(db: Session, query: str, top_k: Optional[int] = None) -> list[dict]:
     """向量检索，返回命中片段(含文档标题，用于展示与溯源)。"""
-    k = top_k or settings.retrieve_top_k
+    if top_k is None:
+        top_k = _get_int_config(db, "qa_retrieval.top_k", settings.retrieve_top_k)
+    k = int(top_k)
     qvec = embed_query(query)
     hits = vectorstore.query(qvec, top_k=k)
 
@@ -91,17 +122,46 @@ def search(db: Session, query: str, top_k: Optional[int] = None) -> list[dict]:
 def faq_match(db: Session, query: str) -> Optional[tuple[KbFaq, float]]:
     """FAQ 语义匹配：相似度达阈值则返回 (FAQ, score)，否则 None。"""
     qvec = embed_query(query)
-    hits = vectorstore.query(qvec, top_k=1, collection=settings.faq_collection)
+    top_k = _get_int_config(db, "qa_retrieval.faq_top_k", 1)
+    hits = vectorstore.query(qvec, top_k=max(1, top_k), collection=settings.faq_collection)
     if not hits:
         return None
     top = hits[0]
     score = top.get("score")
-    if score is None or score < settings.faq_score_threshold:
+    threshold = _get_float_config(db, "qa_retrieval.faq_score_threshold", settings.faq_score_threshold)
+    if score is None or score < threshold:
         return None
     faq_id = (top.get("metadata") or {}).get("faq_id")
     faq = db.get(KbFaq, faq_id) if faq_id else None
     if faq and faq.status == 1:
         return faq, score
+    return None
+
+
+def _faq_fuzzy_match(db: Session, query: str, threshold: int = 70) -> Optional[tuple[int, str]]:
+    """FAQ 模糊匹配：对全部启用 FAQ 做 rapidfuzz 相似度计算，达标则返回 (id, question)。
+
+    用于语义匹配未命中时，补录"有效问题"统计。
+    采用缓存全量 FAQ 问题到内存的方案，避免 N+1 查询。
+    """
+    from rapidfuzz import fuzz
+
+    rows = db.execute(select(KbFaq.id, KbFaq.question).where(KbFaq.status == 1)).all()
+    if not rows:
+        return None
+
+    q = (query or "").strip()
+    best_id: Optional[int] = None
+    best_question: Optional[str] = None
+    best_score = threshold
+    for row_id, row_question in rows:
+        score = fuzz.ratio(q, row_question)
+        if score > best_score:
+            best_score = score
+            best_id = row_id
+            best_question = row_question
+    if best_id is not None:
+        return best_id, best_question  # type: ignore[return-value]
     return None
 
 
@@ -192,11 +252,12 @@ def _save_qa(
     return answer_msg
 
 
-def _is_no_answer(hits: list[dict]) -> bool:
+def _is_no_answer(db: Session, hits: list[dict]) -> bool:
     if not hits:
         return True
     top = hits[0].get("score")
-    return top is None or top < settings.retrieve_score_threshold
+    threshold = _get_float_config(db, "qa_retrieval.score_threshold", settings.retrieve_score_threshold)
+    return top is None or top < threshold
 
 
 def _is_llm_no_answer(answer: str) -> bool:
@@ -249,10 +310,20 @@ def ask(
             "references": [],
         }
 
+    # FAQ 模糊命中（语义未达标但问法相近）：补录 ask_count，继续走检索/LLM
+    _FAQ_FUZZY_THRESHOLD = _get_int_config(db, "qa_retrieval.faq_fuzzy_threshold", 70)
+    faq_fuzzy = _faq_fuzzy_match(db, question, threshold=_FAQ_FUZZY_THRESHOLD)
+    if faq_fuzzy is not None:
+        fuzzy_id, _ = faq_fuzzy
+        db_faq = db.get(KbFaq, fuzzy_id)
+        if db_faq and db_faq.status == 1:
+            db_faq.ask_count = (db_faq.ask_count or 0) + 1
+            db.commit()
+
     hits = search(db, question)
     conv = resolve_conversation(db, user_id, conversation_id, question)
 
-    if _is_no_answer(hits):
+    if _is_no_answer(db, hits):
         answer, no_answer, used_hits = _NO_ANSWER_TEXT, True, []
         llm_used = None
         ops_service.record_unanswered(db, question, user_id)  # 专项记录无答案问题
@@ -260,7 +331,7 @@ def ask(
         # 带重试的 LLM 调用
         try:
             answer = _chat_with_retry(_build_messages(question, hits))
-            no_answer, used_hits, llm_used = False, hits, settings.llm_model
+            no_answer, used_hits, llm_used = False, hits, _get_model(db)
             if _is_llm_no_answer(answer):  # 检索有内容但 LLM 判定资料不足 → 也算无答案
                 no_answer, used_hits = True, []
                 ops_service.record_unanswered(db, question, user_id)
@@ -358,10 +429,20 @@ def ask_stream(
             }
             return
 
+        # FAQ 模糊命中（语义未达标但问法相近）：补录 ask_count，继续走检索/LLM
+        _FAQ_FUZZY_THRESHOLD = _get_int_config(db, "qa_retrieval.faq_fuzzy_threshold", 70)
+        faq_fuzzy = _faq_fuzzy_match(db, question, threshold=_FAQ_FUZZY_THRESHOLD)
+        if faq_fuzzy is not None:
+            fuzzy_id, _ = faq_fuzzy
+            db_faq = db.get(KbFaq, fuzzy_id)
+            if db_faq and db_faq.status == 1:
+                db_faq.ask_count = (db_faq.ask_count or 0) + 1
+                db.commit()
+
         hits = search(db, question)
         conv = resolve_conversation(db, user_id, conversation_id, question)
 
-        if _is_no_answer(hits):
+        if _is_no_answer(db, hits):
             answer, no_answer, used_hits, llm_used = _NO_ANSWER_TEXT, True, [], None
             ops_service.record_unanswered(db, question, user_id)  # 专项记录无答案问题
             # 逐字、有节奏地输出兜底语，呈现打字机效果
@@ -369,7 +450,7 @@ def ask_stream(
                 yield {"event": "delta", "data": ch}
                 time.sleep(0.03)
         else:
-            no_answer, used_hits, llm_used = False, hits, settings.llm_model
+            no_answer, used_hits, llm_used = False, hits, _get_model(db)
             buf = []
             try:
                 for piece in _chat_stream_with_retry(_build_messages(question, hits)):
@@ -425,8 +506,26 @@ def ask_stream(
 
 
 # ==================== LLM 调用辅助函数（带重试）====================
+def _get_model(db: Session) -> str | None:
+    """读取模型配置，失败时返回 settings 默认值。"""
+    val = app_config_service.get_qa_config_value(db, "qa_model.model", settings.llm_model)
+    return val or settings.llm_model
+
+
 def _chat_with_retry(messages: list[dict]) -> str:
     """带重试的同步 LLM 调用。"""
+    db = SessionLocal()
+    try:
+        temperature = _get_float_config(db, "qa_model.temperature", 0.3)
+        max_tokens = _get_int_config(db, "qa_model.max_tokens", 0)
+        model = _get_model(db)
+    finally:
+        db.close()
+
+    kwargs: dict[str, Any] = {}
+    if max_tokens > 0:
+        kwargs["max_tokens"] = max_tokens
+
     @retry(
         stop=stop_after_attempt(_LLM_RETRY_ATTEMPTS),
         wait=wait_exponential(multiplier=1, min=_LLM_RETRY_MIN_WAIT, max=_LLM_RETRY_MAX_WAIT),
@@ -438,19 +537,31 @@ def _chat_with_retry(messages: list[dict]) -> str:
         ),
     )
     def _call():
-        return llm.chat(messages)
+        return llm.chat(messages, temperature=temperature, model=model, **kwargs)
 
     return _call()
 
 
 def _chat_stream_with_retry(messages: list[dict]) -> Iterator[str]:
     """带重试的流式 LLM 调用。"""
+    db = SessionLocal()
+    try:
+        temperature = _get_float_config(db, "qa_model.temperature", 0.3)
+        max_tokens = _get_int_config(db, "qa_model.max_tokens", 0)
+        model = _get_model(db)
+    finally:
+        db.close()
+
+    kwargs: dict[str, Any] = {}
+    if max_tokens > 0:
+        kwargs["max_tokens"] = max_tokens
+
     attempt = 0
 
     while attempt < _LLM_RETRY_ATTEMPTS:
         attempt += 1
         try:
-            yield from llm.chat_stream(messages)
+            yield from llm.chat_stream(messages, temperature=temperature, model=model, **kwargs)
             return
         except Exception as e:
             if attempt >= _LLM_RETRY_ATTEMPTS:

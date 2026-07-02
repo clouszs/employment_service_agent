@@ -166,6 +166,7 @@ class FaqRead(ORMModel):
     category_id: Optional[int]
     vector_id: Optional[str]
     hit_count: int
+    ask_count: int
     status: int
     created_at: datetime
     updated_at: datetime

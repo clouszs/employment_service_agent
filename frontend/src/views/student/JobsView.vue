@@ -80,15 +80,17 @@ async function handleSearch() {
 }
 .page-header h2 {
   margin: 0 0 4px;
-  font-size: 22px;
+  font-size: 20px;
+  color: #1e293b;
 }
 .subtitle {
   margin: 0;
-  color: #6b7280;
   font-size: 13px;
+  color: #6b7280;
 }
 .search-card {
   margin-bottom: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
 .results {
   display: grid;
@@ -96,9 +98,13 @@ async function handleSearch() {
 }
 .job-card {
   padding: 18px;
-  background: white;
-  border-radius: 8px;
+  background: #ffffff;
+  border-radius: 10px;
   border: 1px solid #e5e7eb;
+  transition: box-shadow 0.2s;
+}
+.job-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
 }
 .job-header {
   display: flex;
@@ -109,11 +115,12 @@ async function handleSearch() {
 .job-header h3 {
   margin: 0;
   font-size: 16px;
+  color: #1e293b;
 }
 .job-snippet {
   margin: 0;
   color: #374151;
-  line-height: 1.6;
+  line-height: 1.7;
   font-size: 14px;
 }
 .job-footer {

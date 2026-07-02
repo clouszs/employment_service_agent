@@ -3,18 +3,25 @@
 由 REST 端点直接调用，不经过 Agent 工作流：简历生成是用户主动触发的确定性
 业务功能，不需要 Agent 的意图路由/检索。LLM 调用走 chat_with_usage，并通过
 llm_usage.log_feature_usage 记录用量（审计链路）。
+
+新增：保存/列表/删除/默认设置 + PDF 生成（reportlab）。
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import os
+import uuid
+from datetime import datetime
 from typing import Any, Optional
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.llm import chat_with_usage
-from app.models import LlmUsageSource, SysUser
+from app.models import LlmUsageSource, SysUser, UserResume
 from app.services.llm_usage import log_feature_usage
 
 logger = logging.getLogger(__name__)
@@ -103,3 +110,202 @@ def _safe_parse_json(text: str) -> Optional[dict[str, Any]]:
         return obj if isinstance(obj, dict) else None
     except (json.JSONDecodeError, TypeError):
         return None
+
+
+# ==================== 简历持久化 ====================
+
+_RESUME_STORAGE_DIR = getattr(settings, "resume_storage_dir", "storage/resumes")
+
+
+def save_resume(
+    db: Session,
+    user_id: int,
+    title: str,
+    content: dict[str, Any],
+    is_default: bool = False,
+) -> UserResume:
+    """保存一份简历（JSON 入库）。"""
+    if is_default:
+        # 取消同用户其他默认
+        db.execute(
+            UserResume.__table__.update().where(UserResume.user_id == user_id).values(is_default=0)
+        )
+    obj = UserResume(
+        user_id=user_id,
+        title=title,
+        content=json.dumps(content, ensure_ascii=False),
+        is_default=1 if is_default else 0,
+    )
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+def list_user_resumes(db: Session, user_id: int, page: int = 1, size: int = 20) -> tuple[list[UserResume], int]:
+    """列出用户所有简历（按更新时间倒序）。"""
+    stmt = select(UserResume).where(UserResume.user_id == user_id)
+    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    rows = (
+        db.execute(stmt.order_by(UserResume.updated_at.desc()).offset((page - 1) * size).limit(size))
+        .scalars()
+        .all()
+    )
+    return list(rows), total
+
+
+def get_user_resume(db: Session, resume_id: int, user_id: int) -> Optional[UserResume]:
+    """获取单份简历（校验归属）。"""
+    return db.scalar(select(UserResume).where(UserResume.id == resume_id, UserResume.user_id == user_id))
+
+
+def delete_user_resume(db: Session, resume_id: int, user_id: int) -> bool:
+    """删除简历（校验归属）。"""
+    obj = db.scalar(select(UserResume).where(UserResume.id == resume_id, UserResume.user_id == user_id))
+    if obj is None:
+        return False
+    db.delete(obj)
+    db.commit()
+    return True
+
+
+def set_default_resume(db: Session, resume_id: int, user_id: int) -> Optional[UserResume]:
+    """设为默认简历（取消其他默认）。"""
+    obj = db.scalar(select(UserResume).where(UserResume.id == resume_id, UserResume.user_id == user_id))
+    if obj is None:
+        return None
+    db.execute(
+        UserResume.__table__.update().where(UserResume.user_id == user_id).values(is_default=0)
+    )
+    obj.is_default = 1
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+# ==================== PDF 生成 ====================
+
+def generate_resume_pdf(db: Session, resume_id: int, user_id: int) -> tuple[str, str]:
+    """根据已保存的简历 JSON 生成 PDF 文件，返回 (文件绝对路径, 下载文件名)。
+
+    使用 reportlab 生成 A4 排版 PDF，存储到 storage/resumes/ 目录。
+    返回路径供路由层做 FileResponse 下载。
+    """
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+
+    obj = db.scalar(select(UserResume).where(UserResume.id == resume_id, UserResume.user_id == user_id))
+    if obj is None:
+        raise ValueError("简历不存在")
+
+    try:
+        content = json.loads(obj.content) if isinstance(obj.content, str) else obj.content
+    except json.JSONDecodeError:
+        content = {}
+
+    # 确保存储目录存在
+    os.makedirs(_RESUME_STORAGE_DIR, exist_ok=True)
+    filename = f"resume_{user_id}_{resume_id}_{uuid.uuid4().hex[:8]}.pdf"
+    abs_path = os.path.join(_RESUME_STORAGE_DIR, filename)
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        "ResumeTitle", parent=styles["Heading1"], fontSize=18, textColor=colors.HexColor("#1e293b"), spaceAfter=6
+    )
+    heading_style = ParagraphStyle(
+        "ResumeHeading", parent=styles["Heading2"], fontSize=13, textColor=colors.HexColor("#334155"), spaceAfter=4, spaceBefore=10
+    )
+    body_style = ParagraphStyle(
+        "ResumeBody", parent=styles["BodyText"], fontSize=10, textColor=colors.HexColor("#374151"), leading=16
+    )
+    small_style = ParagraphStyle(
+        "ResumeSmall", parent=styles["BodyText"], fontSize=9, textColor=colors.HexColor("#6b7280"), leading=14
+    )
+
+    story = []
+
+    # 姓名 + 联系方式
+    basics = content.get("basics", {})
+    name = basics.get("name", "姓名")
+    story.append(Paragraph(f"<b>{name}</b>", title_style))
+    contact_parts = [v for v in [basics.get("title"), basics.get("email"), basics.get("phone"), basics.get("location")] if v]
+    if contact_parts:
+        story.append(Paragraph(" | ".join(contact_parts), small_style))
+    story.append(Spacer(1, 4 * mm))
+
+    # 个人简介
+    if content.get("summary"):
+        story.append(Paragraph("个人简介", heading_style))
+        story.append(Paragraph(content["summary"], body_style))
+        story.append(Spacer(1, 2 * mm))
+
+    # 教育经历
+    if content.get("education"):
+        story.append(Paragraph("教育经历", heading_style))
+        for edu in content["education"]:
+            school = edu.get("school", "")
+            major = edu.get("major", "")
+            degree = edu.get("degree", "")
+            period = edu.get("period", "")
+            header = f"<b>{school}</b> - {major} | {degree}"
+            if period:
+                header += f" | {period}"
+            story.append(Paragraph(header, body_style))
+        story.append(Spacer(1, 2 * mm))
+
+    # 工作/实习经历
+    if content.get("experience"):
+        story.append(Paragraph("工作经历", heading_style))
+        for exp in content["experience"]:
+            org = exp.get("org", "")
+            role = exp.get("role", "")
+            period = exp.get("period", "")
+            header = f"<b>{org}</b> - {role}"
+            if period:
+                header += f" | {period}"
+            story.append(Paragraph(header, body_style))
+            highlights = exp.get("highlights", [])
+            if highlights:
+                for h in highlights:
+                    story.append(Paragraph(f"• {h}", body_style))
+        story.append(Spacer(1, 2 * mm))
+
+    # 技能
+    if content.get("skills"):
+        story.append(Paragraph("技能", heading_style))
+        skills = content["skills"]
+        if isinstance(skills, list):
+            story.append(Paragraph("、".join(str(s) for s in skills), body_style))
+        else:
+            story.append(Paragraph(str(skills), body_style))
+        story.append(Spacer(1, 2 * mm))
+
+    # 项目经历
+    if content.get("projects"):
+        story.append(Paragraph("项目经历", heading_style))
+        for proj in content["projects"]:
+            name = proj.get("name", "")
+            desc = proj.get("desc", "")
+            header = f"<b>{name}</b>"
+            story.append(Paragraph(header, body_style))
+            if desc:
+                story.append(Paragraph(desc, body_style))
+            highlights = proj.get("highlights", [])
+            if highlights:
+                for h in highlights:
+                    story.append(Paragraph(f"• {h}", body_style))
+
+    # 生成 PDF
+    doc = SimpleDocTemplate(abs_path, pagesize=A4, rightMargin=20 * mm, leftMargin=20 * mm, topMargin=20 * mm, bottomMargin=20 * mm)
+    doc.build(story)
+
+    # 更新数据库中的 pdf_path（相对路径）
+    rel_path = os.path.relpath(abs_path, ".")
+    obj.pdf_path = rel_path
+    db.commit()
+
+    download_name = f"{obj.title or name}.pdf"
+    return abs_path, download_name

@@ -1,5 +1,6 @@
 """运营·安全·质量业务逻辑：敏感词 / 问答日志 / 统计 / 评测集。"""
 
+import logging
 import re
 import time
 from datetime import date, datetime, timedelta
@@ -9,6 +10,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 import hashlib
+
+logger = logging.getLogger(__name__)
 
 from app.models import (
     Announcement,
@@ -204,14 +207,62 @@ def stats_overview(db: Session) -> dict:
 
 
 def hot_questions(db: Session, limit: int = 10) -> list[dict]:
-    """高频问题：按 FAQ 命中次数排行。"""
-    rows = db.execute(
-        select(KbFaq.id, KbFaq.question, KbFaq.hit_count)
-        .where(KbFaq.status == 1)
-        .order_by(KbFaq.hit_count.desc())
-        .limit(limit)
-    ).all()
-    return [{"faq_id": r[0], "question": r[1], "hit_count": r[2]} for r in rows]
+    """高频问题：按 OpQueryLog 中实际提问次数排行（模糊去重）。
+
+    出错时返回空列表，绝不抛异常。
+    """
+    try:
+        from rapidfuzz import fuzz
+        has_fuzz = True
+    except ImportError:
+        has_fuzz = False
+
+    # 第一步：精确分组计数，只取干净数据
+    try:
+        rows = db.execute(
+            select(
+                OpQueryLog.question,
+                func.count().label("cnt"),
+            )
+            .where(OpQueryLog.question.isnot(None))
+            .where(func.length(OpQueryLog.question) > 0)
+            .group_by(OpQueryLog.question)
+            .order_by(func.count().desc())
+            .limit(200)
+        ).all()
+    except Exception as exc:  # noqa: BLE001
+        logger.error("hot_questions 查询失败: %s", exc)
+        return []
+
+    if not rows:
+        return []
+
+    items = [{"question": str(r[0]), "ask_count": int(r[1])} for r in rows]
+
+    # 第二步：rapidfuzz 模糊合并
+    if not has_fuzz:
+        return [{"question": i["question"], "ask_count": i["ask_count"]} for i in items[:limit]]
+
+    try:
+        merged: list[dict] = []
+        for item in items:
+            placed = False
+            for m in merged:
+                try:
+                    score = fuzz.ratio(item["question"], m["question"])
+                except Exception:  # noqa: BLE001
+                    score = 0
+                if score > 82:
+                    m["ask_count"] += item["ask_count"]
+                    placed = True
+                    break
+            if not placed:
+                merged.append({"question": item["question"], "ask_count": item["ask_count"]})
+        merged.sort(key=lambda x: x["ask_count"], reverse=True)
+        return merged[:limit]
+    except Exception as exc:  # noqa: BLE001
+        logger.error("hot_questions 模糊合并失败: %s", exc)
+        return [{"question": i["question"], "ask_count": i["ask_count"]} for i in items[:limit]]
 
 
 def recent_activity(db: Session, limit: int = 8) -> list[dict]:

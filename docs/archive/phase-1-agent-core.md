@@ -157,19 +157,37 @@ START → route → [search | direct | refuse]
                     ↓
          [generate | regenerate | refuse]
                     ↓
-         check_consistency → verify_facts → content_moderation
+         check_consistency → verify_facts
                     ↓
-              [accept | accept_with_warning | refuse]
-                    ↓
-                   error_handler → END
+           [accept | regenerate | refuse]
+            ↙          |              \
+        accept      regenerate        refuse
+          ↓              ↓               ↓
+ content_moderation  verify_facts    refuse
+          ↓           ↙   \
+     [accept |        accept  regenerate
+      accept_with_warning ↓      ↓
+           ↓         content_moderation  (retry < MAX)
+     error_handler           ↓
+           ↓           [accept | accept_with_warning | refuse]
+           →──────────────── error_handler
+                              ↓
+                               END
 ```
+
+说明：
+- `verify_facts` 后已改为三阶段自校正闭环，不再固定连 `content_moderation`。
+- `regenerate` 后根据 `retry_attempt` 与 `MAX_REGENERATE_RETRY=2` 比较，未超限回到 `verify_facts`，超限熔断到 `content_moderation`。
+- `verify_facts` 节点新增 `should_retry` / `should_refuse` 输出，供条件边决策。
+- `regenerate_with_hints` 节点新增 `retry_attempt` 递增和 `regeneration_hint` 注入。
 
 **关键配置：**
 
 | 配置项 | 值 | 作用 |
 |--------|----|------|
 | `recursion_limit` | `15` | LangGraph 递归限制（硬兜底防死循环） |
-| `checkpointer` | `MemorySaver` | 内存 Checkpoint（P1 替换为持久化） |
+| `checkpointer` | `SqliteSaver` | SQLite 持久化 Checkpoint |
+| `MAX_REGENERATE_RETRY` | `2` | 重生成熔断上限，超出后强制进入内容审核 |
 
 #### 操作 1-9：创建 routers/agent.py（Agent 路由）
 

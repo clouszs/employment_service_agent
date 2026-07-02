@@ -100,3 +100,26 @@ def admin_delete_conversation(
     conv = _get_conversation_or_404(db, conversation_id)
     svc.force_delete_conversation(db, conv)
     return success(message="已强制删除")
+
+
+@router.post("/langsmith/toggle", summary="开关 LangSmith 追踪")
+def toggle_langsmith(
+    payload: dict,
+    _: SysUser = Depends(require_roles("admin")),
+) -> dict:
+    """运行时开关 LangSmith 追踪。payload: { enabled: bool }"""
+    from app.core.langsmith_setup import refresh_langsmith_status
+
+    enabled = bool(payload.get("enabled", False))
+    api_key = payload.get("api_key") or ""
+    project = payload.get("project") or ""
+    endpoint = payload.get("endpoint") or ""
+
+    result = refresh_langsmith_status(
+        enabled=enabled,
+        api_key=api_key,
+        project=project,
+        endpoint=endpoint,
+    )
+    status_text = "已启用" if result else "已关闭"
+    return success({"enabled": result}, message=f"LangSmith 追踪{status_text}")

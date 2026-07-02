@@ -39,6 +39,7 @@ from app.core.config import settings
 from app.core.llm import chat_with_usage
 from app.core.database import SessionLocal
 from app.models import KbDocument
+from app.services import app_config_service
 
 logger = logging.getLogger(__name__)
 
@@ -240,7 +241,13 @@ def search_knowledge(state: dict) -> dict:
     if retry > 0:
         query = _broaden_query(query)
 
-    top_k = DEFAULT_TOP_K
+    # 读取管理员配置的检索条数（无配置时回退到常量默认值）
+    _db = SessionLocal()
+    try:
+        _val = app_config_service.get_qa_config_value(_db, "qa_retrieval.top_k")
+        top_k = int(_val) if _val is not None else DEFAULT_TOP_K
+    finally:
+        _db.close()
     hits = knowledge_search(query, top_k=top_k)
 
     tool_tracker = ToolCallTracker()
@@ -547,11 +554,39 @@ def regenerate_with_hints(state: dict) -> dict:
     return {
         "response": response,
         "regenerate_count": state.get("regenerate_count", 0) + 1,
+        "retry_attempt": state.get("retry_attempt", 0) + 1,  # [Self-Refinement] 递增重试计数
         "llm_tokens_out": completion_tokens,
+        "regeneration_hint": _build_hint(  # [Self-Refinement] hint 注入
+            state.get("fact_issues", []),
+            state.get("consistency_issues", []),
+        ),
         "reasoning_chain": state.get("reasoning_chain", []) + [
             {"step": "regenerate", "regenerate_count": state.get("regenerate_count", 0) + 1},
         ],
     }
+
+
+# [Self-Refinement] 新增：将审查失败详情格式化为自然语言 hint
+def _build_hint(fact_issues: list[dict], consistency_issues: list[dict]) -> str:
+    """将事实/一致性核验失败项打包为可读修正提示。"""
+    parts: list[str] = []
+
+    high_facts = [i for i in fact_issues if i.get("severity") == "high"]
+    if high_facts:
+        parts.append("【事实核验失败】")
+        for issue in high_facts[:5]:
+            parts.append(f"- {issue.get('description', issue.get('type', '事实不一致'))}")
+
+    high_consistency = [i for i in consistency_issues if i.get("severity") == "high"]
+    if high_consistency:
+        parts.append("【一致性检查失败】")
+        for issue in high_consistency[:5]:
+            parts.append(f"- {issue.get('description', issue.get('contradiction_type', '逻辑不一致'))}")
+
+    if not parts:
+        return "请确保回答与参考资料一致，避免编造政策编号、日期、金额等事实。"
+
+    return "\n".join(parts)
 
 
 # ==================== 一致性检查节点 ====================
@@ -603,16 +638,33 @@ def check_consistency(state: dict) -> dict:
 
 
 def verify_facts(state: dict) -> dict:
-    """事实核验：正则验证政策编号、日期、金额等，并检查是否被引用支持。"""
+    """事实核验：正则验证政策编号、日期、金额等，并检查是否被引用支持。
+
+    [Self-Refinement] 新增：根据核验结果写入 should_retry / should_refuse，
+    供 verify_facts 后的条件边判断是否进入重生成闭环。
+    """
     response = state.get("response", "")
     citations = state.get("citations", [])
 
     issues = fact_verifier.verify(response, citations=citations)
 
+    # [Self-Refinement] 判断是否需要重试/拒答
+    unsupported_count = sum(len(i.get("unsupported_values", [])) for i in issues)
+    should_retry = unsupported_count > 0
+    should_refuse = unsupported_count >= 5  # 过多事实错误，直接拒答
+
     return {
         "fact_issues": issues,
+        "should_retry": should_retry,
+        "should_refuse": should_refuse,
         "reasoning_chain": state.get("reasoning_chain", []) + [
-            {"step": "fact_verification", "issue_count": len(issues)},
+            {
+                "step": "fact_verification",
+                "issue_count": len(issues),
+                "unsupported_count": unsupported_count,
+                "should_retry": should_retry,
+                "should_refuse": should_refuse,
+            },
         ],
     }
 

@@ -23,6 +23,7 @@ from app.agent.nodes import (
     verify_facts,
 )
 from app.agent.state import AgentState
+from app.agent.constants import MAX_REGENERATE_RETRY  # [Self-Refinement] 自校正熔断上限
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -81,13 +82,30 @@ class AgentGraph:
             },
         )
 
-        # regenerate → generate（后续可扩展为跳转回 search）
-        graph.add_edge("regenerate", "generate")
-
-        # generate → check_consistency → verify_facts → content_moderation
+        # generate → check_consistency → verify_facts
         graph.add_edge("generate", "check_consistency")
         graph.add_edge("check_consistency", "verify_facts")
-        graph.add_edge("verify_facts", "content_moderation")
+
+        # [Self-Refinement] 修改：verify_facts 之后改为条件边，进入三阶段自校正闭环
+        graph.add_conditional_edges(
+            "verify_facts",
+            _verify_decision,
+            {
+                "accept": "content_moderation",
+                "regenerate": "regenerate",
+                "refuse": "refuse",
+            },
+        )
+
+        # [Self-Refinement] 修改：regenerate 之后改为条件边，根据重试次数决定回到审查或熔断
+        graph.add_conditional_edges(
+            "regenerate",
+            _after_regenerate_decision,
+            {
+                "verify_facts": "verify_facts",
+                "content_moderation": "content_moderation",
+            },
+        )
 
         # content_moderation → 最终决策
         graph.add_conditional_edges(
@@ -154,6 +172,26 @@ def _post_moderation_decision(state: dict) -> str:
     if state.get("is_low_confidence") or state.get("warnings"):
         return "accept_with_warning"
     return "accept"
+
+
+# [Self-Refinement] 新增：审查后决策（三阶段自校正闭环）
+def _verify_decision(state: dict) -> str:
+    """审查决策：根据事实核验结果决定 accept / regenerate / refuse。"""
+    if state.get("should_refuse"):
+        return "refuse"
+    if state.get("should_retry"):
+        return "regenerate"
+    return "accept"
+
+
+# [Self-Refinement] 新增：重生成后决策（熔断或回到审查环）
+def _after_regenerate_decision(state: dict) -> str:
+    """重生成后决策：未超限回到审查，超限熔断到内容审核。"""
+    retry = state.get("retry_attempt", 0)
+    if retry < MAX_REGENERATE_RETRY:
+        return "verify_facts"
+    logger.warning("重生成次数已达上限(%d)，熔断到内容审核", retry)
+    return "content_moderation"
 
 
 # ==================== 全局单例 ====================

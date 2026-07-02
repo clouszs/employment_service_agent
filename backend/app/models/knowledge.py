@@ -110,6 +110,7 @@ class KbFaq(Base):
     category_id: Mapped[Optional[int]] = mapped_column(BigInteger, index=True, comment="所属分类ID")
     vector_id: Mapped[Optional[str]] = mapped_column(String(128), comment="问题向量ID")
     hit_count: Mapped[int] = mapped_column(Integer, default=0, comment="命中次数(热度)")
+    ask_count: Mapped[int] = mapped_column(Integer, default=0, comment="模糊命中次数(学生侧)")
     status: Mapped[int] = mapped_column(SmallInteger, default=1, comment="1启用0禁用")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), comment="创建时间")
     updated_at: Mapped[datetime] = mapped_column(
