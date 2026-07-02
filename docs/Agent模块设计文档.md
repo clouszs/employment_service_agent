@@ -1,10 +1,6 @@
 # 高校智慧就业服务平台 - Agent 智能体模块设计方案
-
-> 文档版本：v3.0
-> 创建时间：2026-06
-> 最后更新：2026-06-25
-> 项目定位：面向市场的高校智慧就业服务 SaaS 平台
-> 技术栈：LangGraph + LangSmith + ChromaDB + 通义千问
+> **文档版本**：v3.0（设计愿景参考）
+> **注意**：本文为设计愿景参考文档，非实现记录。实际架构决策以 `architecture/ARCHITECTURE_DECISIONS.md` 为准，能力清单以 `modules/CURRENT_CAPABILITIES.md` 为准。部分设计（如多智能体拓扑、句子级引用）尚未落地。
 
 ---
 
